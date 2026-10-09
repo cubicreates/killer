@@ -46,14 +46,20 @@ It eliminates intrusive web restrictions: preventing websites from forcing real 
   - Neutralizes `onselectstart` and `selectstart` events.
   - **Result:** You can highlight, select, and search author names and notes freely.
 
-### 4. 📋 Universal Paste & Force-Sync Engine (Copy & Paste Everywhere)
-- **The Problem:** Aggressive websites and exam/form portals lock input fields with `onpaste="return false;"`, `e.preventDefault()` on `paste`, and `Ctrl+V` keydown blocks (colloquially known as *"The Irritating Text Box"*). Anti-copy scripts also wipe clipboard data on `copy`.
+### 4. 📋 Universal Paste & Ghost Human Typer (Defeat Sneaky Paste Checkers)
+- **The Problem:** 
+  1. *Form Lockers:* Exam/portal input fields block pasting via `onpaste="return false;"` or `e.preventDefault()` on `paste`.
+  2. *Sneaky Paste Detectors:* Clever chat sites and anti-cheat portals monitor `InputEvent.inputType === 'insertFromPaste'`, listen for `paste` events, or flag you if 100+ characters appear instantly with zero `keydown` events (*"You pasted this response!"*).
 - **The DRDOOM Fix:**
-  - Traps `copy`, `cut`, and `paste` events in the capture phase on `window` and `document` before any page script can see them.
-  - Dynamically extracts clipboard text and force-inserts it at cursor position (`selectionStart`/`selectionEnd`) across standard inputs, textareas, and modern rich text editors (`contenteditable`).
-  - Dispatches via native prototype property descriptors so controlled inputs in **React, Vue, and Angular** seamlessly update without losing state.
-  - Automatically strips `onpaste`, `oncopy`, `oncut`, and `onselectstart` inline attributes from the DOM in real-time via `MutationObserver`.
-  - Neutralizes `onpaste` prototype setters so website scripts cannot bind anti-paste listeners.
+  - **Standard Paste (`Ctrl+V`):**
+    - Neutralizes `Event.prototype.preventDefault` during `paste` so native browser pasting executes smoothly everywhere.
+    - Spoofs `InputEvent.prototype.inputType` so it always reports `'insertText'` (manual typing) rather than `'insertFromPaste'`.
+    - Automatically strips `onpaste` attributes and neutralizes property setters.
+  - **Ghost Human Typer (`Ctrl+Shift+V`):**
+    - Completely **swallows the `paste` event** (0 paste events fired on the page).
+    - Takes your clipboard text and synthesizes an authentic stream of individual `keydown` $\rightarrow$ `beforeinput` $\rightarrow$ DOM insert $\rightarrow$ `input` $\rightarrow$ `keyup` events for **every single character**.
+    - Injects randomized micro-jitter (human typing timing) so velocity/WPM algorithms detect 100% natural manual typing.
+    - Press **`Escape`** at any point to immediately cancel typing simulation.
 
 ### 5. ⌨️ Window Management Key Shield
 - Traps all function keys (`F1` through `F12`), `Escape`, and window resize shortcuts (`Alt+Enter`, `Meta+Arrows`) before page scripts can intercept them.

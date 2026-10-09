@@ -14,6 +14,8 @@
   window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__ = true;
 
   let currentFullscreenElement = null;
+  let lastCopiedText = '';
+  let isTypingSimulationActive = false;
 
   // ==========================================
   // BRIDGE COMMUNICATION (MAIN WORLD -> ISOLATED BRIDGE -> BACKGROUND)
@@ -169,6 +171,7 @@
 
     // Escape Key User Control: Exit fullscreen to normal window without notifying the website!
     if (e.key === 'Escape' && e.type === 'keydown') {
+      isTypingSimulationActive = false; // Abort typing simulation if running
       e.stopImmediatePropagation();
       e.preventDefault();
 
@@ -183,6 +186,24 @@
       // CRITICAL: We deliberately do NOT clear currentFullscreenElement!
       // The website's document.fullscreenElement remains active, and NO exit event is fired!
       console.log('[DRDOOM] User pressed Escape: Window restored. Website still thinks fullscreen is active!');
+      return;
+    }
+
+    // Ctrl+Shift+V / Cmd+Shift+V: Trigger Ghost Human Typer (types text with keystroke stream)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V') && e.type === 'keydown') {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+
+      const target = getActiveOrTargetElement(e);
+      if (!target) return;
+
+      if (lastCopiedText) {
+        simulateHumanTyping(target, lastCopiedText);
+      } else if (navigator.clipboard && navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(function (clip) {
+          if (clip) simulateHumanTyping(target, clip);
+        }).catch(function () {});
+      }
       return;
     }
 
@@ -321,6 +342,25 @@
     configurable: true
   });
 
+  // LAYER 2.5: Spoof InputEvent.prototype.inputType
+  // Websites that check if (e.inputType === 'insertFromPaste') are tricked into seeing 'insertText' (manual typing)!
+  try {
+    const origInputTypeDesc = Object.getOwnPropertyDescriptor(InputEvent.prototype, 'inputType');
+    if (origInputTypeDesc && origInputTypeDesc.get) {
+      Object.defineProperty(InputEvent.prototype, 'inputType', {
+        get: function () {
+          const val = origInputTypeDesc.get.call(this);
+          if (val === 'insertFromPaste') {
+            return 'insertText'; // Spoof: Always report as manual typing!
+          }
+          return val;
+        },
+        configurable: true,
+        enumerable: true
+      });
+    }
+  } catch (e) {}
+
   // LAYER 3: Target Resolution & Framework-Aware Insertion
   function getActiveOrTargetElement(e) {
     let target = e ? e.target : null;
@@ -417,7 +457,124 @@
     }
   }
 
-  // LAYER 4: Force-Copy & Copy Protection
+  // LAYER 4: Ghost Human Typer (Keystroke Stream Synthesizer)
+  // Generates real keydown -> beforeinput -> input -> keyup events with human jitter per character
+  function simulateHumanTyping(rawTarget, text) {
+    if (!text || !rawTarget || isTypingSimulationActive) return;
+
+    const target = findEditableTarget(rawTarget);
+    if (!target) return;
+
+    isTypingSimulationActive = true;
+
+    // Adapt speed dynamically to finish in ~1-2s while maintaining authentic cadence
+    let minDelay = 4;
+    let maxDelay = 12;
+    if (text.length > 500) {
+      minDelay = 1;
+      maxDelay = 3;
+    } else if (text.length < 50) {
+      minDelay = 10;
+      maxDelay = 22;
+    }
+
+    let index = 0;
+
+    function step() {
+      if (!isTypingSimulationActive || index >= text.length) {
+        isTypingSimulationActive = false;
+        return;
+      }
+
+      const char = text[index++];
+      const charCode = char.charCodeAt(0);
+
+      // 1. Dispatch keydown event
+      const downEvt = new KeyboardEvent('keydown', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        charCode: charCode,
+        keyCode: charCode,
+        which: charCode,
+        bubbles: true,
+        cancelable: true
+      });
+      target.dispatchEvent(downEvt);
+
+      // 2. Dispatch beforeinput event
+      try {
+        const beforeEvt = new InputEvent('beforeinput', {
+          inputType: 'insertText',
+          data: char,
+          bubbles: true,
+          cancelable: true
+        });
+        target.dispatchEvent(beforeEvt);
+      } catch (e) {}
+
+      // 3. Insert character into DOM
+      if (target.isContentEditable) {
+        try {
+          document.execCommand('insertText', false, char);
+        } catch (e) {}
+      } else if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        try {
+          let start = target.selectionStart;
+          let end = target.selectionEnd;
+          if (typeof start !== 'number') {
+            start = (target.value || '').length;
+            end = start;
+          }
+          const val = target.value || '';
+          const nextVal = val.slice(0, start) + char + val.slice(end);
+
+          const proto = target instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+          const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (nativeSetter) {
+            nativeSetter.call(target, nextVal);
+          } else {
+            target.value = nextVal;
+          }
+
+          try { target.setSelectionRange(start + 1, start + 1); } catch (err) {}
+        } catch (e) {
+          target.value = (target.value || '') + char;
+        }
+      }
+
+      // 4. Dispatch input event (inputType: 'insertText')
+      try {
+        const inEvt = new InputEvent('input', {
+          inputType: 'insertText',
+          data: char,
+          bubbles: true,
+          cancelable: false
+        });
+        target.dispatchEvent(inEvt);
+      } catch (e) {
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // 5. Dispatch keyup event
+      const upEvt = new KeyboardEvent('keyup', {
+        key: char,
+        code: `Key${char.toUpperCase()}`,
+        charCode: charCode,
+        keyCode: charCode,
+        which: charCode,
+        bubbles: true,
+        cancelable: true
+      });
+      target.dispatchEvent(upEvt);
+
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+      setTimeout(step, delay);
+    }
+
+    step();
+  }
+
+  // LAYER 5: Force-Copy & Copy Protection
   function handleForceCopy(e) {
     const selection = window.getSelection();
     let text = selection ? selection.toString() : '';
@@ -435,10 +592,13 @@
       }
     }
 
-    if (text && e.clipboardData) {
-      try {
-        e.clipboardData.setData('text/plain', text);
-      } catch (err) {}
+    if (text) {
+      lastCopiedText = text; // Cache for synchronous Ghost Human Typer
+      if (e.clipboardData) {
+        try {
+          e.clipboardData.setData('text/plain', text);
+        } catch (err) {}
+      }
     }
   }
 

@@ -266,6 +266,20 @@
       <div id="pasteResultText" style="margin-top: 6px; font-size: 12px; color: #38bdf8;">Box is empty.</div>
     </div>
 
+    <!-- 2b. The Sneaky Paste Checker (Ghost Human Typer Test) -->
+    <div class="test-section">
+      <div class="test-section-title">
+        <span>🕵️ Sneaky Paste Checker (Ghost Human Typer Test)</span>
+        <span id="sneakyBadge" class="val-true">Detector Armed</span>
+      </div>
+      <div style="color: #94a3b8; font-size: 12px; margin-bottom: 6px;">
+        This field flags you if: (1) A <code>paste</code> event is detected, (2) <code>e.inputType === 'insertFromPaste'</code>, or (3) More than 10 chars appear with 0 keydowns.
+        <br>Use <strong style="color: #38bdf8;">Ctrl+Shift+V</strong> to activate the <em>Ghost Human Typer</em>!
+      </div>
+      <textarea id="sneakyInput" rows="3" placeholder="Press Ctrl+Shift+V here to type clipboard text as real keystrokes..."></textarea>
+      <div id="sneakyResult" style="margin-top: 6px; font-size: 12px; color: #94a3b8;">Waiting for input...</div>
+    </div>
+
     <!-- 3. Music & Tab/App Switch Test Area -->
     <div class="test-section">
       <div class="test-section-title">
@@ -394,6 +408,39 @@
     irritatingTextBox.addEventListener('input', () => {
       pasteResultText.textContent = `Contains: "${irritatingTextBox.value}"`;
       log(`Irritating Text Box received input: "${irritatingTextBox.value.slice(0, 40)}..."`);
+    });
+
+    // The Sneaky Paste Checker: Flags paste events, insertFromPaste, and burst velocity
+    const sneakyInput = document.getElementById('sneakyInput');
+    const sneakyResult = document.getElementById('sneakyResult');
+    let sneakyKeyCount = 0;
+
+    sneakyInput.addEventListener('keydown', (e) => {
+      if (e.key !== 'Control' && e.key !== 'Shift' && e.key !== 'Alt' && e.key !== 'Meta') {
+        sneakyKeyCount++;
+      }
+    });
+
+    sneakyInput.addEventListener('paste', (e) => {
+      sneakyResult.textContent = '❌ SNEAKY DETECTOR: You pasted this! (Detected via "paste" event)';
+      sneakyResult.className = 'val-false';
+      log('Sneaky Detector: "paste" event detected!');
+    });
+
+    sneakyInput.addEventListener('input', (e) => {
+      if (e.inputType === 'insertFromPaste') {
+        sneakyResult.textContent = '❌ SNEAKY DETECTOR: You pasted this! (Detected via e.inputType === "insertFromPaste")';
+        sneakyResult.className = 'val-false';
+        log('Sneaky Detector: e.inputType === "insertFromPaste" detected!');
+      } else if (sneakyInput.value.length > 10 && sneakyKeyCount === 0) {
+        sneakyResult.textContent = '❌ SNEAKY DETECTOR: Burst detected! (10+ characters with 0 keydowns)';
+        sneakyResult.className = 'val-false';
+        log('Sneaky Detector: 10+ characters burst with 0 keydowns!');
+      } else if (sneakyKeyCount > 0) {
+        sneakyResult.textContent = `✅ 100% Manually Typed! (${sneakyKeyCount} keystrokes logged, inputType: "${e.inputType || 'insertText'}")`;
+        sneakyResult.className = 'val-true';
+        log(`Sneaky Detector: Authenticated as manual typing (${sneakyKeyCount} keys)!`);
+      }
     });
 
     // Music Player Simulation
