@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Fullscreen Interceptor Test Page</title>
+  <title>Fullscreen & Window Shield Test Page</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -19,7 +19,7 @@
       border: 1px solid #334155;
       border-radius: 12px;
       padding: 24px;
-      max-width: 650px;
+      max-width: 680px;
       width: 100%;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     }
@@ -33,19 +33,31 @@
       font-size: 14px;
       line-height: 1.5;
     }
+    .grid-status {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+    }
     .status-box {
       background-color: #0f172a;
       border: 1px solid #334155;
       border-radius: 8px;
-      padding: 16px;
-      margin: 20px 0;
+      padding: 14px;
       font-family: monospace;
-      font-size: 14px;
+      font-size: 13px;
+    }
+    .status-box h3 {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .status-row {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .status-row:last-child {
       margin-bottom: 0;
@@ -58,10 +70,13 @@
       color: #f87171;
       font-weight: bold;
     }
+    .val-neutral {
+      color: #38bdf8;
+    }
     .actions {
       display: flex;
       gap: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
     button {
       flex: 1;
@@ -86,6 +101,15 @@
     }
     .btn-secondary:hover {
       background-color: #334155;
+    }
+    .key-test-box {
+      background: #020617;
+      border: 1px dashed #475569;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #cbd5e1;
     }
     .log-container {
       background: #020617;
@@ -113,9 +137,9 @@
 </head>
 <body>
   <div class="card" id="testContainer">
-    <h1>Fullscreen Interceptor Verification</h1>
+    <h1>Fullscreen & Window Shield Verification</h1>
     <p>
-      Click <strong>"Request Fullscreen"</strong> below. When the extension is loaded, the page will report that it is in fullscreen, but your browser window will <strong>stay windowed</strong> without taking over the screen.
+      Verify that fullscreen is simulated while your window stays windowed, and test that window control keys (F11, Escape, F-keys) and minimization/blur events are completely shielded from page detection.
     </p>
 
     <div class="actions">
@@ -123,24 +147,45 @@
       <button class="btn-secondary" id="btnExit">Exit Fullscreen</button>
     </div>
 
-    <div class="status-box">
-      <div class="status-row">
-        <span>document.fullscreenElement:</span>
-        <span id="statFsElem">null</span>
+    <div class="grid-status">
+      <div class="status-box">
+        <h3>Fullscreen State</h3>
+        <div class="status-row">
+          <span>fullscreenElement:</span>
+          <span id="statFsElem">null</span>
+        </div>
+        <div class="status-row">
+          <span>Page thinks Fullscreen:</span>
+          <span id="statStatus" class="val-false">No</span>
+        </div>
       </div>
-      <div class="status-row">
-        <span>document.fullscreenEnabled:</span>
-        <span id="statFsEnabled">true</span>
+
+      <div class="status-box">
+        <h3>Visibility & Focus</h3>
+        <div class="status-row">
+          <span>visibilityState:</span>
+          <span id="statVis" class="val-true">visible</span>
+        </div>
+        <div class="status-row">
+          <span>hasFocus():</span>
+          <span id="statFocus" class="val-true">true</span>
+        </div>
       </div>
-      <div class="status-row">
-        <span>Page believes it is fullscreen:</span>
-        <span id="statStatus" class="val-false">No</span>
+    </div>
+
+    <div class="key-test-box">
+      <strong>Keyboard Shield Tester:</strong> Click anywhere on this page and press any key:
+      <div style="margin-top: 6px;">
+        Last key detected by page: <span id="lastKey" class="val-neutral" style="font-weight: bold;">(None yet)</span>
+      </div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+        * Normal keys (A, B, 1, 2) will be logged. Window management keys (F11, Escape, F1-F12, etc.) are shielded and will NOT appear.
       </div>
     </div>
 
     <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #94a3b8;">Event Log:</div>
     <div class="log-container" id="logBox">
-      <div class="log-item"><span class="log-time">[Init]</span> Page loaded. Ready for test.</div>
+      <div class="log-item"><span class="log-time">[Init]</span> Page initialized. Ready for test.</div>
     </div>
   </div>
 
@@ -148,8 +193,10 @@
     const btnRequest = document.getElementById('btnRequest');
     const btnExit = document.getElementById('btnExit');
     const statFsElem = document.getElementById('statFsElem');
-    const statFsEnabled = document.getElementById('statFsEnabled');
     const statStatus = document.getElementById('statStatus');
+    const statVis = document.getElementById('statVis');
+    const statFocus = document.getElementById('statFocus');
+    const lastKey = document.getElementById('lastKey');
     const logBox = document.getElementById('logBox');
 
     function log(msg) {
@@ -163,33 +210,33 @@
 
     function updateStatus() {
       const el = document.fullscreenElement || document.webkitFullscreenElement;
-      statFsElem.textContent = el ? `${el.tagName}#${el.id || 'anonymous'}` : 'null';
-      statFsEnabled.textContent = String(document.fullscreenEnabled);
+      statFsElem.textContent = el ? `${el.tagName}#${el.id || 'box'}` : 'null';
 
       if (el) {
-        statStatus.textContent = 'Yes (Simulated / Intercepted)';
+        statStatus.textContent = 'Yes (Simulated)';
         statStatus.className = 'val-true';
       } else {
         statStatus.textContent = 'No';
         statStatus.className = 'val-false';
       }
+
+      statVis.textContent = document.visibilityState;
+      statFocus.textContent = String(document.hasFocus());
     }
 
     btnRequest.addEventListener('click', () => {
       log('User clicked Request Fullscreen...');
       const target = document.getElementById('testContainer');
-
       const p = target.requestFullscreen ? target.requestFullscreen() : target.webkitRequestFullscreen();
       if (p && typeof p.then === 'function') {
         p.then(() => {
-          log('requestFullscreen() Promise resolved successfully!');
+          log('requestFullscreen() Promise resolved.');
           updateStatus();
-        }).catch((err) => {
+        }).catch(err => {
           log('requestFullscreen() rejected: ' + err.message);
           updateStatus();
         });
       } else {
-        log('requestFullscreen() called (synchronous).');
         updateStatus();
       }
     });
@@ -200,13 +247,7 @@
         document.exitFullscreen().then(() => {
           log('exitFullscreen() resolved.');
           updateStatus();
-        }).catch((err) => {
-          log('exitFullscreen() rejected: ' + err.message);
-          updateStatus();
         });
-      } else if (document.webkitExitFullscreen) {
-        document.webkitExitFullscreen();
-        updateStatus();
       }
     });
 
@@ -215,12 +256,25 @@
       updateStatus();
     });
 
-    document.addEventListener('webkitfullscreenchange', () => {
-      log('Received event: "webkitfullscreenchange"');
+    // Listen to keys (to verify that protected keys NEVER trigger this listener)
+    window.addEventListener('keydown', (e) => {
+      lastKey.textContent = `"${e.key}" (code: ${e.code})`;
+      log(`Page received keydown: "${e.key}"`);
+    });
+
+    // Listen to blur and visibilitychange
+    window.addEventListener('blur', () => {
+      log('Page received "blur" event');
       updateStatus();
     });
 
-    // Initial check
+    document.addEventListener('visibilitychange', () => {
+      log(`Page received "visibilitychange": state=${document.visibilityState}`);
+      updateStatus();
+    });
+
+    // Poll status periodically to reflect changes
+    setInterval(updateStatus, 1000);
     updateStatus();
   </script>
 </body>

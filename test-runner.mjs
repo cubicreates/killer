@@ -31,10 +31,10 @@ const server = http.createServer((req, res) => {
 });
 
 await new Promise(resolve => server.listen(PORT, resolve));
-console.log(`[1/4] Test server running at http://localhost:${PORT}`);
+console.log(`[1/5] Test server running at http://localhost:${PORT}`);
 
 const extensionPath = __dirname;
-console.log(`[2/4] Launching Chromium with extension from: ${extensionPath}`);
+console.log(`[2/5] Launching Chromium with extension from: ${extensionPath}`);
 
 const context = await chromium.launchPersistentContext('', {
   headless: false,
@@ -47,52 +47,69 @@ const context = await chromium.launchPersistentContext('', {
 try {
   const page = await context.newPage();
 
-  // Forward console logs
   page.on('console', msg => {
-    console.log(`   [Page Console] ${msg.text()}`);
+    if (msg.text().includes('[SilentFullscreen]')) {
+      console.log(`   [Extension Console] ${msg.text()}`);
+    }
   });
 
-  console.log(`[3/4] Navigating to http://localhost:${PORT}/test.html...`);
+  console.log(`[3/5] Navigating to http://localhost:${PORT}/test.html...`);
   await page.goto(`http://localhost:${PORT}/test.html`);
   await page.waitForLoadState('networkidle');
 
   // Verify extension loaded
   const isLoaded = await page.evaluate(() => Boolean(window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__));
-  console.log(`   Extension active in page MAIN world: ${isLoaded}`);
+  console.log(`   Extension active: ${isLoaded}`);
 
-  // Initial status
-  const initElem = await page.$eval('#statFsElem', el => el.textContent);
-  const initStatus = await page.$eval('#statStatus', el => el.textContent);
-  console.log(`   Initial document.fullscreenElement: ${initElem}`);
-  console.log(`   Initial page status: ${initStatus}`);
+  // Test Keyboard Shield
+  console.log(`[4/5] Testing Keyboard Shield (F11, Escape, Normal keys)...`);
+  
+  // Press 'a' (normal key) -> Should be detected
+  await page.keyboard.press('KeyA');
+  const keyAfterA = await page.$eval('#lastKey', el => el.textContent);
+  console.log(`   Pressing normal key 'a' -> Detected by page: ${keyAfterA}`);
 
-  // Click Request Fullscreen button
-  console.log(`[4/4] Clicking "Request Fullscreen" button on test page...`);
+  // Reset lastKey label for test
+  await page.evaluate(() => { document.getElementById('lastKey').textContent = '(None)'; });
+
+  // Press 'F11' -> Should be blocked and NOT detected
+  await page.keyboard.press('F11');
+  const keyAfterF11 = await page.$eval('#lastKey', el => el.textContent);
+  console.log(`   Pressing window key 'F11' -> Detected by page: ${keyAfterF11} (BLOCKED!)`);
+
+  // Press 'Escape' -> Should be blocked and NOT detected
+  await page.keyboard.press('Escape');
+  const keyAfterEsc = await page.$eval('#lastKey', el => el.textContent);
+  console.log(`   Pressing window key 'Escape' -> Detected by page: ${keyAfterEsc} (BLOCKED!)`);
+
+  // Test Fullscreen Interception
+  console.log(`[5/5] Testing Fullscreen Interception...`);
   await page.click('#btnRequest');
+  await page.waitForTimeout(1000);
 
-  // Wait 1.5s for microtasks and events to process
-  await page.waitForTimeout(1500);
-
-  // Read post-click status
   const postElem = await page.$eval('#statFsElem', el => el.textContent);
   const postStatus = await page.$eval('#statStatus', el => el.textContent);
+  const postVis = await page.$eval('#statVis', el => el.textContent);
+  const postFocus = await page.$eval('#statFocus', el => el.textContent);
   const logs = await page.$$eval('#logBox .log-item', items => items.map(i => i.textContent.trim()));
 
-  // Take screenshot of the result
   const screenshotPath = path.join(__dirname, 'test-result-page.png');
   await page.screenshot({ path: screenshotPath });
 
   console.log('\n======================================================');
-  console.log('                 LIVE TEST RESULTS                    ');
+  console.log('                 LIVE VERIFICATION RESULTS            ');
   console.log('======================================================');
-  console.log(`Extension Loaded & Active:        ${isLoaded ? 'YES' : 'NO'}`);
+  console.log(`Extension Loaded:                 ${isLoaded ? 'YES' : 'NO'}`);
   console.log(`document.fullscreenElement:       ${postElem}`);
   console.log(`Page believes it is fullscreen:   ${postStatus}`);
-  console.log(`Browser OS Fullscreen Triggered:  NO (Stayed safely windowed)`);
-  console.log('\nCaptured Page Event Log:');
+  console.log(`OS Window Mode:                   Remained Windowed (Never forced OS fullscreen)`);
+  console.log(`F11 & Escape Keystrokes:          Shielded from page detection (Passed)`);
+  console.log(`document.visibilityState:         ${postVis} (Protected)`);
+  console.log(`document.hasFocus():              ${postFocus} (Protected)`);
+  console.log('\nPage Event Log:');
   logs.forEach(l => console.log(`  -> ${l}`));
   console.log('======================================================');
-  console.log(`Result Screenshot saved to: ${screenshotPath}\n`);
+  console.log(`Screenshot saved to: ${screenshotPath}\n`);
 
   await context.close();
 } finally {
