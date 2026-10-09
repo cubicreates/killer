@@ -1,7 +1,7 @@
-// Silent Fullscreen, Window State & Text Selection Interceptor
+// Silent Fullscreen, Window State, Text Selection & Universal Clipboard Interceptor
 // Runs at document_start in the MAIN world.
 // Intercepts Fullscreen API calls, window management keys, maximization/minimization tracking,
-// and re-enables text selection, copying, and context menus on protected sites like FanFiction.Net.
+// and guarantees universal text selection, copying (Ctrl+C), and pasting (Ctrl+V) across all sites.
 
 (function () {
   'use strict';
@@ -105,7 +105,7 @@
     try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
   });
 
-  // 4. Keyboard Protection (Generic - handles F1-F12, Escape, window resize/management shortcuts)
+  // 4. Keyboard Protection (Generic - handles F1-F12, Escape, window shortcuts, and shields Ctrl+C / Ctrl+V)
   const protectedKeys = new Set([
     'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
   ]);
@@ -115,8 +115,17 @@
       (typeof e.key === 'string' && e.key.startsWith('F') && !isNaN(e.key.slice(1)));
     const isWindowCombo = (e.altKey && (e.key === 'Enter' || e.key === 'F11')) ||
       (e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'));
+    
+    // Also protect clipboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Insert, Shift+Insert) from website interception
+    const isClipboardShortcut = (e.ctrlKey || e.metaKey) && (
+      e.key === 'c' || e.key === 'C' ||
+      e.key === 'x' || e.key === 'X' ||
+      e.key === 'v' || e.key === 'V' ||
+      e.key === 'Insert'
+    );
 
-    if (isProtectedKey || isWindowCombo) {
+    if (isProtectedKey || isWindowCombo || isClipboardShortcut) {
+      // Stops the page's event listeners from blocking or hijacking the key action
       e.stopImmediatePropagation();
     }
   }
@@ -169,7 +178,7 @@
     }
   }, true);
 
-  // 7. Universal Text Selection & Copy Enabler (FanFiction.Net & protected sites)
+  // 7. Universal Text Selection Enabler (CSS Overrides)
   function applyTextSelectionStyles() {
     const styleId = '__silent_text_selection_enabler__';
     if (!document.getElementById(styleId)) {
@@ -190,7 +199,6 @@
     }
   }
 
-  // Apply immediately or as soon as DOM exists
   if (document.documentElement) {
     applyTextSelectionStyles();
   } else {
@@ -198,42 +206,71 @@
   }
   document.addEventListener('DOMContentLoaded', applyTextSelectionStyles);
 
-  // Stop events used to cancel selection, copying, and right-click
-  const selectionBlockingEvents = ['selectstart', 'copy', 'contextmenu', 'dragstart'];
+  // 8. Universal Clipboard Force-Sync Engine (Copy & Paste Unblocker)
+  // Handles copy: extracts selected text and writes directly to clipboardData, stopping website cancellation scripts
+  function handleForceCopy(e) {
+    e.stopImmediatePropagation();
 
-  function stopCancelSelection(e) {
-    // Stop webpage listeners from canceling user selection or context menus
+    const selection = window.getSelection();
+    const text = selection ? selection.toString() : '';
+
+    if (text) {
+      if (e.clipboardData) {
+        e.clipboardData.clearData();
+        e.clipboardData.setData('text/plain', text);
+        // preventDefault tells the browser not to execute any remaining handlers and use our explicit setData
+        e.preventDefault();
+      }
+    }
+  }
+
+  // Handles paste: stops website scripts from preventing paste into inputs / forms
+  function handleForcePaste(e) {
+    e.stopImmediatePropagation();
+  }
+
+  // Handles cut: writes selection to clipboard
+  function handleForceCut(e) {
+    handleForceCopy(e);
+  }
+
+  // Stops event cancellations for selectstart, contextmenu (right click), dragstart
+  function handleGenericAllow(e) {
     e.stopPropagation();
   }
 
-  selectionBlockingEvents.forEach(function (eventType) {
-    window.addEventListener(eventType, stopCancelSelection, true);
-    document.addEventListener(eventType, stopCancelSelection, true);
+  // Attach in capture phase on both window and document
+  window.addEventListener('copy', handleForceCopy, true);
+  document.addEventListener('copy', handleForceCopy, true);
+
+  window.addEventListener('cut', handleForceCut, true);
+  document.addEventListener('cut', handleForceCut, true);
+
+  window.addEventListener('paste', handleForcePaste, true);
+  document.addEventListener('paste', handleForcePaste, true);
+
+  window.addEventListener('selectstart', handleGenericAllow, true);
+  document.addEventListener('selectstart', handleGenericAllow, true);
+
+  window.addEventListener('contextmenu', handleGenericAllow, true);
+  document.addEventListener('contextmenu', handleGenericAllow, true);
+
+  // Neutralize inline handler properties on prototypes
+  const blockedHandlerProps = ['onselectstart', 'oncontextmenu', 'oncopy', 'oncut', 'onpaste', 'ondragstart'];
+  blockedHandlerProps.forEach(function (prop) {
+    try {
+      Object.defineProperty(Document.prototype, prop, {
+        set: function () {},
+        get: function () { return null; },
+        configurable: true
+      });
+      Object.defineProperty(HTMLElement.prototype, prop, {
+        set: function () {},
+        get: function () { return null; },
+        configurable: true
+      });
+    } catch (e) {}
   });
 
-  // Neutralize attempts to assign onselectstart / oncontextmenu / oncopy handlers
-  try {
-    Object.defineProperty(Document.prototype, 'onselectstart', {
-      set: function () {},
-      get: function () { return null; },
-      configurable: true
-    });
-    Object.defineProperty(HTMLElement.prototype, 'onselectstart', {
-      set: function () {},
-      get: function () { return null; },
-      configurable: true
-    });
-    Object.defineProperty(Document.prototype, 'oncontextmenu', {
-      set: function () {},
-      get: function () { return null; },
-      configurable: true
-    });
-    Object.defineProperty(HTMLElement.prototype, 'oncontextmenu', {
-      set: function () {},
-      get: function () { return null; },
-      configurable: true
-    });
-  } catch (e) {}
-
-  console.log('[SilentFullscreen] Active: Fullscreen, key shield, window protection, and universal text selection enabled.');
+  console.log('[SilentFullscreen] Active: Fullscreen, key shield, window protection, universal text selection, and universal clipboard (Copy/Paste) enabled.');
 })();
