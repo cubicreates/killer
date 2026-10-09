@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Silent background extension: Fullscreen interception, window shield, universal text selection, clipboard unblocker, and tab/app switch protection.",
   "permissions": [
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "<all_urls>"

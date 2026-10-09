@@ -334,16 +334,10 @@
         statStatus.className = 'val-false';
       }
 
-      const visualEl = document.querySelector('[data-drdoom-fullscreen="true"]');
       const statVisualFs = document.getElementById('statVisualFs');
       if (statVisualFs) {
-        if (visualEl) {
-          statVisualFs.textContent = 'Maximized (Active)';
-          statVisualFs.className = 'val-true';
-        } else {
-          statVisualFs.textContent = el ? 'Restored (Spoofed!)' : 'Normal';
-          statVisualFs.className = el ? 'val-true' : 'val-neutral';
-        }
+        statVisualFs.textContent = el ? 'Active (Native Spoofed)' : 'Normal';
+        statVisualFs.className = el ? 'val-true' : 'val-neutral';
       }
 
       statVis.textContent = document.visibilityState;

@@ -1,7 +1,8 @@
 // DRDOOM - Silent Browser Enhancement & Research Suite
 // Runs at document_start in the MAIN world.
-// Intercepts Fullscreen API, shields window keys, protects against tab/app switch detection (Alt+Tab),
-// enables universal text selection (FanFiction.Net), and forces universal clipboard (Copy & Universal Paste).
+// Intercepts Fullscreen API (true native fullscreen + stealth escape spoofing),
+// shields window keys, protects against tab/app switch detection (Alt+Tab),
+// enables universal text selection (FanFiction.Net), and disarms all anti-paste mechanisms.
 
 (function () {
   'use strict';
@@ -18,6 +19,10 @@
   // BRIDGE COMMUNICATION (MAIN WORLD -> ISOLATED BRIDGE -> BACKGROUND)
   // ==========================================
   function sendBridgeAction(action) {
+    if (!action) return;
+    try {
+      window.postMessage({ source: '__DRDOOM__', action: action }, '*');
+    } catch (e) {}
     try {
       window.dispatchEvent(new CustomEvent('__DRDOOM_BRIDGE_EVENT__', {
         detail: { action: action }
@@ -25,33 +30,8 @@
     } catch (e) {}
   }
 
-  // Inject full-viewport pseudo-fullscreen styles for target element
-  function applyFullscreenElementStyles() {
-    const styleId = '__drdoom_fullscreen_styles__';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        [data-drdoom-fullscreen="true"] {
-          position: fixed !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: 100vw !important;
-          height: 100vh !important;
-          max-width: 100vw !important;
-          max-height: 100vh !important;
-          z-index: 2147483647 !important;
-          margin: 0 !important;
-          box-sizing: border-box !important;
-        }
-      `;
-      const root = document.head || document.documentElement;
-      if (root) root.appendChild(style);
-    }
-  }
-
   // ==========================================
-  // 1. FULLSCREEN API & MAXIMIZATION SPOOFER
+  // 1. FULLSCREEN API & NATIVE FULLSCREEN SPOOFER
   // ==========================================
   function dispatchFullscreenEvents() {
     const eventNames = [
@@ -79,16 +59,10 @@
   function mockRequestFullscreen() {
     currentFullscreenElement = this;
 
-    // 1. Visually maximize the element to fill the viewport
-    applyFullscreenElementStyles();
-    try {
-      this.setAttribute('data-drdoom-fullscreen', 'true');
-    } catch (e) {}
+    // Trigger REAL native browser fullscreen on the Chrome window
+    sendBridgeAction('FULLSCREEN');
 
-    // 2. Maximize the Chrome browser window via bridge
-    sendBridgeAction('MAXIMIZE');
-
-    // 3. Dispatch fullscreenchange so website believes it is in true fullscreen
+    // Dispatch fullscreenchange so website believes it is in true fullscreen
     queueMicrotask(function () {
       dispatchFullscreenEvents();
     });
@@ -109,9 +83,6 @@
   });
 
   function mockExitFullscreen() {
-    if (currentFullscreenElement && typeof currentFullscreenElement.removeAttribute === 'function') {
-      try { currentFullscreenElement.removeAttribute('data-drdoom-fullscreen'); } catch (e) {}
-    }
     currentFullscreenElement = null;
     sendBridgeAction('RESTORE');
     queueMicrotask(function () {
@@ -157,7 +128,7 @@
     try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
   });
 
-  // Viewport / Screen dimension spoofing (passes innerHeight === screen.height tests)
+  // Viewport / Screen dimension spoofing (blinds sites checking innerHeight === screen.height)
   try {
     const origInnerW = Object.getOwnPropertyDescriptor(window, 'innerWidth') || { get: () => window.innerWidth };
     const origInnerH = Object.getOwnPropertyDescriptor(window, 'innerHeight') || { get: () => window.innerHeight };
@@ -195,36 +166,27 @@
       (typeof e.key === 'string' && e.key.startsWith('F') && !isNaN(e.key.slice(1)));
     const isWindowCombo = (e.altKey && (e.key === 'Enter' || e.key === 'F11')) ||
       (e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'));
-    
-    // Shield clipboard shortcuts from page interception
-    const isClipboardShortcut = (e.ctrlKey || e.metaKey) && (
-      e.key === 'c' || e.key === 'C' ||
-      e.key === 'x' || e.key === 'X' ||
-      e.key === 'v' || e.key === 'V' ||
-      e.key === 'Insert'
-    );
 
-    // Escape Key User Control: Restore/Minimize without notifying the website!
+    // Escape Key User Control: Exit fullscreen to normal window without notifying the website!
     if (e.key === 'Escape' && e.type === 'keydown') {
       e.stopImmediatePropagation();
+      e.preventDefault();
 
       if (e.shiftKey) {
         // Shift+Escape: Minimize window to taskbar
         sendBridgeAction('MINIMIZE');
       } else {
-        // Normal Escape: Restore window and un-expand visual lock for the user
-        if (currentFullscreenElement && typeof currentFullscreenElement.removeAttribute === 'function') {
-          try { currentFullscreenElement.removeAttribute('data-drdoom-fullscreen'); } catch (err) {}
-        }
+        // Normal Escape: Restore window from fullscreen to normal window for the user
         sendBridgeAction('RESTORE');
       }
 
       // CRITICAL: We deliberately do NOT clear currentFullscreenElement!
       // The website's document.fullscreenElement remains active, and NO exit event is fired!
+      console.log('[DRDOOM] User pressed Escape: Window restored. Website still thinks fullscreen is active!');
       return;
     }
 
-    if (isProtectedKey || isWindowCombo || isClipboardShortcut) {
+    if (isProtectedKey || isWindowCombo) {
       e.stopImmediatePropagation();
     }
   }
@@ -322,9 +284,44 @@
   document.addEventListener('DOMContentLoaded', applyTextSelectionStyles);
 
   // ==========================================
-  // 5. UNIVERSAL CLIPBOARD FORCE-SYNC ENGINE (COPY & UNIVERSAL PASTE)
+  // 5. UNIVERSAL CLIPBOARD & PASTE ENGINE
   // ==========================================
 
+  // LAYER 1: Neutralize Event.prototype.preventDefault during paste & copy
+  // This allows the browser's native paste & copy engine to execute even when
+  // websites call e.preventDefault() in paste listeners or on Ctrl+V keydown!
+  const originalPreventDefault = Event.prototype.preventDefault;
+  Event.prototype.preventDefault = function () {
+    if (this.type === 'paste') {
+      // Disarm website anti-paste script trying to prevent paste!
+      return;
+    }
+    if (this.type === 'keydown') {
+      const isPasteShortcut = (this.ctrlKey || this.metaKey) && (this.key === 'v' || this.key === 'V');
+      if (isPasteShortcut) {
+        // Disarm website trying to block Ctrl+V keydown!
+        return;
+      }
+    }
+    return originalPreventDefault.apply(this, arguments);
+  };
+
+  // LAYER 2: Neutralize Event.prototype.returnValue
+  const originalReturnValueDesc = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
+  Object.defineProperty(Event.prototype, 'returnValue', {
+    get: function () {
+      return originalReturnValueDesc && originalReturnValueDesc.get ? originalReturnValueDesc.get.call(this) : true;
+    },
+    set: function (val) {
+      if (this.type === 'paste') return;
+      if (originalReturnValueDesc && originalReturnValueDesc.set) {
+        originalReturnValueDesc.set.call(this, val);
+      }
+    },
+    configurable: true
+  });
+
+  // LAYER 3: Target Resolution & Framework-Aware Insertion
   function getActiveOrTargetElement(e) {
     let target = e ? e.target : null;
     if (!target || target === document.body || target === document.documentElement) {
@@ -351,14 +348,14 @@
     return target;
   }
 
-  // Helper to force-insert text into any input, textarea, or contenteditable target
+  // Force-Insert text into inputs, textareas, React/Vue controlled components, or contenteditables
   function forceInsertText(rawTarget, text) {
     if (!text || !rawTarget) return;
 
     const target = findEditableTarget(rawTarget);
     if (!target) return;
 
-    // Handle ContentEditable elements (e.g. Notion, Google Docs, Discord web, modern editors)
+    // Handle ContentEditable (Notion, Google Docs, Discord, rich text editors)
     if (target.isContentEditable) {
       try {
         const success = document.execCommand('insertText', false, text);
@@ -382,12 +379,21 @@
     // Handle standard inputs and textareas (including React, Vue, Angular controlled fields)
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
       try {
-        const start = typeof target.selectionStart === 'number' ? target.selectionStart : (target.value || '').length;
-        const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : (target.value || '').length;
+        let start = 0;
+        let end = 0;
+        try {
+          start = typeof target.selectionStart === 'number' ? target.selectionStart : (target.value || '').length;
+          end = typeof target.selectionEnd === 'number' ? target.selectionEnd : (target.value || '').length;
+        } catch (selErr) {
+          // Some input types (e.g. email, number) throw on selectionStart
+          start = (target.value || '').length;
+          end = (target.value || '').length;
+        }
+
         const val = target.value || '';
         const newVal = val.slice(0, start) + text + val.slice(end);
 
-        // Bypass React / modern framework synthetic event interception via prototype setter
+        // Native property setter bypasses React / Vue synthetic event interference
         const proto = target instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
         const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
         if (nativeSetter) {
@@ -411,63 +417,57 @@
     }
   }
 
-  // Force-Copy: Extracts selected text and ensures it is placed into clipboardData
+  // LAYER 4: Force-Copy & Copy Protection
   function handleForceCopy(e) {
-    e.stopImmediatePropagation();
-
     const selection = window.getSelection();
     let text = selection ? selection.toString() : '';
 
-    // If nothing selected in window, check active input/textarea selection
     if (!text && document.activeElement) {
       const active = document.activeElement;
       if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') {
-        const start = active.selectionStart;
-        const end = active.selectionEnd;
-        if (typeof start === 'number' && typeof end === 'number' && start !== end) {
-          text = (active.value || '').slice(start, end);
-        }
+        try {
+          const start = active.selectionStart;
+          const end = active.selectionEnd;
+          if (typeof start === 'number' && typeof end === 'number' && start !== end) {
+            text = (active.value || '').slice(start, end);
+          }
+        } catch (e) {}
       }
     }
 
-    if (text) {
-      if (e.clipboardData) {
-        try {
-          e.clipboardData.clearData();
-          e.clipboardData.setData('text/plain', text);
-          e.preventDefault();
-        } catch (err) {}
-      }
+    if (text && e.clipboardData) {
+      try {
+        e.clipboardData.setData('text/plain', text);
+      } catch (err) {}
     }
   }
 
-  // Universal Paste Engine: Neutralizes anti-paste scripts and guarantees insertion
-  function handleForcePaste(e) {
-    e.stopImmediatePropagation();
+  // LAYER 5: Active Paste Watchdog / Fallback
+  // 1. We allow the browser's native paste to fire (preventDefault is neutralized).
+  // 2. If an aggressive website script stopped propagation or cleared the field,
+  //    our watchdog checks after 0ms and force-inserts the clipboard text.
+  function handlePasteWatchdog(e) {
+    const target = getActiveOrTargetElement(e);
+    if (!target) return;
 
-    let text = '';
-    if (e.clipboardData) {
-      text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text') || '';
+    if (target.hasAttribute && target.hasAttribute('onpaste')) {
+      target.removeAttribute('onpaste');
     }
 
-    const target = getActiveOrTargetElement(e);
+    const initialVal = target.value;
+    let clipText = '';
+    if (e.clipboardData) {
+      clipText = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text') || '';
+    }
 
-    if (text && target) {
-      forceInsertText(target, text);
-      e.preventDefault(); // Prevents anti-paste scripts from rejecting or clearing the paste
-    } else if (target && navigator.clipboard && navigator.clipboard.readText) {
-      // Async fallback if clipboardData is restricted
-      navigator.clipboard.readText().then(function (clipText) {
-        if (clipText) {
+    if (clipText) {
+      setTimeout(function () {
+        // If native paste was blocked or didn't update value, force insert
+        if (target.value !== undefined && target.value === initialVal) {
           forceInsertText(target, clipText);
         }
-      }).catch(function () {});
-      e.preventDefault();
+      }, 0);
     }
-  }
-
-  function handleForceCut(e) {
-    handleForceCopy(e);
   }
 
   function handleGenericAllow(e) {
@@ -476,16 +476,14 @@
 
   window.addEventListener('copy', handleForceCopy, true);
   document.addEventListener('copy', handleForceCopy, true);
-  window.addEventListener('cut', handleForceCut, true);
-  document.addEventListener('cut', handleForceCut, true);
-  window.addEventListener('paste', handleForcePaste, true);
-  document.addEventListener('paste', handleForcePaste, true);
+  window.addEventListener('paste', handlePasteWatchdog, true);
+  document.addEventListener('paste', handlePasteWatchdog, true);
   window.addEventListener('selectstart', handleGenericAllow, true);
   document.addEventListener('selectstart', handleGenericAllow, true);
   window.addEventListener('contextmenu', handleGenericAllow, true);
   document.addEventListener('contextmenu', handleGenericAllow, true);
 
-  // Strip anti-paste and anti-copy attributes from DOM
+  // LAYER 6: Strip anti-clipboard attributes from DOM and dynamic nodes
   function stripAntiClipboardAttributes(root) {
     try {
       const scope = root && root.querySelectorAll ? root : document;
@@ -500,7 +498,6 @@
     } catch (e) {}
   }
 
-  // Strip on initial load and observe dynamic insertions
   if (document.documentElement) {
     stripAntiClipboardAttributes(document);
   }
@@ -519,7 +516,7 @@
     observer.observe(document.documentElement || document, { childList: true, subtree: true });
   } catch (e) {}
 
-  // Neutralize inline handler properties on prototypes
+  // LAYER 7: Neutralize property setters on DOM prototypes
   const blockedClipboardProps = ['onselectstart', 'oncontextmenu', 'oncopy', 'oncut', 'onpaste', 'ondragstart'];
   blockedClipboardProps.forEach(function (prop) {
     try {
@@ -530,5 +527,5 @@
     } catch (e) {}
   });
 
-  console.log('[DRDOOM] Active: Fullscreen interception, window keys, tab/app switch protection, text selection, and Universal Paste Engine enabled.');
+  console.log('[DRDOOM] Active: True native fullscreen interception, window keys, tab/app switch protection, text selection, and Universal Paste Engine enabled.');
 })();
