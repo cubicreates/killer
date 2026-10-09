@@ -84,7 +84,7 @@ try {
   console.log(`   #storytext user-select: "${computedUserSelect}" (Overridden to text!)`);
 
   // Test 3: Universal Copy & Paste Test
-  console.log(`[6/7] Testing Universal Copy & Paste Engine...`);
+  console.log(`[6/7] Testing Universal Copy & Paste Engine (The Irritating Text Box)...`);
   await page.evaluate(() => {
     const el = document.getElementById('storytext');
     const range = document.createRange();
@@ -96,20 +96,21 @@ try {
   await page.keyboard.press('ControlOrMeta+KeyC');
   await page.waitForTimeout(300);
 
-  await page.focus('#pasteTarget');
+  await page.focus('#irritatingTextBox');
   await page.keyboard.press('ControlOrMeta+KeyV');
   await page.waitForTimeout(300);
 
-  let pastedValue = await page.$eval('#pasteTarget', el => el.value);
+  let pastedValue = await page.$eval('#irritatingTextBox', el => el.value);
   if (!pastedValue) {
     const selectedText = await page.evaluate(() => window.getSelection().toString());
     await page.evaluate((text) => {
-      document.getElementById('pasteTarget').value = text;
-      document.getElementById('pasteResultText').textContent = `Input contains: "${text.slice(0, 50)}..."`;
+      const target = document.getElementById('irritatingTextBox');
+      target.value = text;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
     }, selectedText);
-    pastedValue = await page.$eval('#pasteTarget', el => el.value);
+    pastedValue = await page.$eval('#irritatingTextBox', el => el.value);
   }
-  console.log(`   Pasted value into protected input: "${pastedValue.slice(0, 45)}..." (SUCCESS!)`);
+  console.log(`   Pasted value into The Irritating Text Box: "${pastedValue.slice(0, 45)}..." (SUCCESS!)`);
 
   // Test 4: Keyboard Shield Test
   await page.evaluate(() => { document.getElementById('lastKey').textContent = '(None)'; });

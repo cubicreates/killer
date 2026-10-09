@@ -42,12 +42,14 @@ It eliminates intrusive web restrictions: preventing websites from forcing real 
   - Neutralizes `onselectstart` and `selectstart` events.
   - **Result:** You can highlight, select, and search author names and notes freely.
 
-### 4. 📋 Universal Clipboard Force-Sync (Copy & Paste Everywhere)
-- **The Problem:** Anti-copy scripts intercept `copy` events and wipe the clipboard data (`e.preventDefault()`), and input forms block pasting with `onpaste="return false;"`.
+### 4. 📋 Universal Paste & Force-Sync Engine (Copy & Paste Everywhere)
+- **The Problem:** Aggressive websites and exam/form portals lock input fields with `onpaste="return false;"`, `e.preventDefault()` on `paste`, and `Ctrl+V` keydown blocks (colloquially known as *"The Irritating Text Box"*). Anti-copy scripts also wipe clipboard data on `copy`.
 - **The DRDOOM Fix:**
-  - Intercepts `copy` and `cut` events in the capture phase and forces `window.getSelection().toString()` directly into `e.clipboardData`.
-  - Shields `Ctrl+C`, `Ctrl+X`, and `Ctrl+V` from website keydown interception.
-  - Neutralizes `onpaste` blocks so you can paste into any input field.
+  - Traps `copy`, `cut`, and `paste` events in the capture phase on `window` and `document` before any page script can see them.
+  - Dynamically extracts clipboard text and force-inserts it at cursor position (`selectionStart`/`selectionEnd`) across standard inputs, textareas, and modern rich text editors (`contenteditable`).
+  - Dispatches via native prototype property descriptors so controlled inputs in **React, Vue, and Angular** seamlessly update without losing state.
+  - Automatically strips `onpaste`, `oncopy`, `oncut`, and `onselectstart` inline attributes from the DOM in real-time via `MutationObserver`.
+  - Neutralizes `onpaste` prototype setters so website scripts cannot bind anti-paste listeners.
 
 ### 5. ⌨️ Window Management Key Shield
 - Traps all function keys (`F1` through `F12`), `Escape`, and window resize shortcuts (`Alt+Enter`, `Meta+Arrows`) before page scripts can intercept them.
@@ -57,36 +59,36 @@ It eliminates intrusive web restrictions: preventing websites from forcing real 
 
 ## 📦 Installation Guide
 
-Choose any of the three installation methods below:
+Choose the method that suits your workflow:
 
-### Method 1: Direct `.crx` File (Recommended from GitHub Releases)
+### Method 1: GitHub Release ZIP (Recommended — Fastest & 100% Reliable)
 
 > **No Node.js, no terminal, and no Google account required!**
 
-1. Download the latest **`DRDOOM.crx`** file from the **[Releases](https://github.com/cubicreates/killer/releases)** page.
-2. Open Google Chrome (or Edge / Brave / Opera).
-3. In the address bar, go to:
+1. Download **`DRDOOM-v1.0.0.zip`** from the **[Releases](https://github.com/cubicreates/killer/releases)** page.
+2. Unzip it to any folder on your computer (e.g. `Downloads/DRDOOM` or `Documents/DRDOOM`).
+3. Open Google Chrome (or Edge / Brave / Opera) and navigate to:
    ```text
    chrome://extensions
    ```
 4. Toggle **ON** the **Developer mode** switch (located in the top-right corner).
-5. Drag and drop the downloaded **`DRDOOM.crx`** file directly onto the `chrome://extensions` page.
-6. When prompted with *"Add DRDOOM?"*, click **Add extension**.
+5. Click the **Load unpacked** button (top-left) and select the unzipped `DRDOOM` folder.
+6. DRDOOM is immediately active and permanently running in the background!
+
+> **Why ZIP instead of CRX?**  
+> On Windows, Google Chrome strictly blocks self-signed `.crx` files outside the Chrome Web Store to protect against malware (showing *"This extension is not listed in the Chrome Web Store"*). Distributing the clean `.zip` for **Load unpacked** bypasses this completely—it never triggers warnings, requires zero sign-in, and never gets auto-disabled.
 
 ---
 
-### Method 2: Load Unpacked (Source / ZIP)
+### Method 2: Load Unpacked from Git Source
 
 1. Clone or download this repository:
    ```bash
    git clone https://github.com/cubicreates/killer.git
    ```
-   *(Or download and extract the repository ZIP).*
 2. Open Chrome and go to `chrome://extensions`.
 3. Enable **Developer mode** in the top-right corner.
-4. Click the **Load unpacked** button (top-left).
-5. Select the project directory (`D:\Github\KillerExtention`).
-6. DRDOOM is now active!
+4. Click **Load unpacked** and select the repository root folder.
 
 ---
 
@@ -94,7 +96,7 @@ Choose any of the three installation methods below:
 
 If you are using a friend's, school, or work computer:
 1. Click the **Profile icon** (top-right circle in Chrome) -> **"Continue without an account"**.
-2. Go to `chrome://extensions` and drag in `DRDOOM.crx` (or Load Unpacked).
+2. Go to `chrome://extensions` and click **Load unpacked** on the unzipped folder.
 3. No admin password or Google sign-in is required.
 4. When finished, delete the temporary profile—leaving zero traces behind.
 

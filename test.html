@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>DRDOOM</title>
+  <title>DRDOOM - Verification Lab</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -52,7 +52,7 @@
     }
     .grid-status {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
       margin: 16px 0;
     }
@@ -159,7 +159,7 @@
       gap: 8px;
       margin-top: 8px;
     }
-    input[type="text"] {
+    input[type="text"], textarea {
       flex: 1;
       background: #0f172a;
       border: 1px solid #334155;
@@ -167,6 +167,8 @@
       padding: 8px 12px;
       color: #f8fafc;
       font-size: 13px;
+      width: 100%;
+      box-sizing: border-box;
     }
     .log-container {
       background: #020617;
@@ -199,7 +201,7 @@
       <span class="badge-doom">ACTIVE</span>
     </div>
     <p>
-      Verification suite for Fullscreen Interception, Keyboard Shield, <strong>Tab & App Switch Protection (Alt+Tab & Background Music)</strong>, and Universal Copy/Paste.
+      Verification suite for Fullscreen Interception, Keyboard Protection, Tab & App Switch Protection (Background Music), and <strong>Universal Paste into Irritating Text Boxes</strong>.
     </p>
 
     <!-- 1. Fullscreen Section -->
@@ -233,16 +235,38 @@
           <span id="statFocus" class="val-true">true</span>
         </div>
       </div>
+
+      <div class="status-box">
+        <h3>Keyboard Shield</h3>
+        <div class="status-row">
+          <span>Last Page Key:</span>
+          <span id="lastKey" class="val-neutral">(None)</span>
+        </div>
+        <div class="status-row">
+          <span>Protected Keys:</span>
+          <span class="val-true">Shielded</span>
+        </div>
+      </div>
     </div>
 
-    <!-- 2. Music & Tab/App Switch Test Area -->
+    <!-- 2. The Irritating Text Box (Universal Paste Test) -->
+    <div class="test-section">
+      <div class="test-section-title">
+        <span>⚡ The Irritating Text Box (Anti-Paste Bypass)</span>
+        <span id="pasteBadge" class="val-true">Universal Paste Active</span>
+      </div>
+      <div style="color: #94a3b8; font-size: 12px; margin-bottom: 6px;">
+        This text area aggressively blocks pasting via <code>onpaste="return false;"</code>, <code>paste</code> event <code>preventDefault()</code>, and <code>Ctrl+V</code> cancellation:
+      </div>
+      <textarea id="irritatingTextBox" rows="3" placeholder="Try pasting anything here (Ctrl+V or right-click Paste)..." onpaste="return false;"></textarea>
+      <div id="pasteResultText" style="margin-top: 6px; font-size: 12px; color: #38bdf8;">Box is empty.</div>
+    </div>
+
+    <!-- 3. Music & Tab/App Switch Test Area -->
     <div class="test-section">
       <div class="test-section-title">
         <span>🎵 Background Music & Tab/App Switch Protection</span>
         <span id="musicBadge" class="val-true">Shield Active</span>
-      </div>
-      <div style="color: #94a3b8; font-size: 12px; margin-bottom: 8px;">
-        Simulates music apps that pause on <code>blur</code> (Alt+Tab) or <code>visibilitychange</code> (Tab switch):
       </div>
       <div style="display: flex; align-items: center; gap: 12px;">
         <button class="btn-audio" id="btnToggleMusic" style="flex: 0 0 160px; padding: 10px;">▶ Play Music</button>
@@ -251,40 +275,16 @@
           <div style="font-size: 11px; color: #64748b;">Watchdog detects switch: <span id="watchdogDetected" class="val-true">No (Shielded)</span></div>
         </div>
       </div>
-      <div style="font-size: 11px; color: #64748b; margin-top: 8px;">
-        * Switch tabs or press Alt+Tab to another desktop app. The watchdog will NEVER receive blur/visibilitychange events, keeping audio playing.
-      </div>
     </div>
 
-    <!-- 3. Text Selection & Copy/Paste Section -->
+    <!-- 4. Text Selection & Copy/Paste Section -->
     <div class="test-section">
       <div class="test-section-title">
-        <span>📋 Universal Copy & Paste Test (FanFiction.Net Simulation)</span>
-        <span class="val-true">Unblocked</span>
-      </div>
-      <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">
-        Protected story container (has <code>user-select: none;</code> and <code>oncopy="return false;"</code>):
+        <span>📋 Protected Story Text (FanFiction.Net Simulation)</span>
+        <span class="val-true">Selectable & Copyable</span>
       </div>
       <div id="storytext" onselectstart="return false;" oncopy="return false;">
-        <strong>Author's Note:</strong> Story created by <em>Aria_Moonlight_92</em>. Cross-posted from the archives. Highlight this text, press Ctrl+C, and paste below!
-      </div>
-      <div class="input-row">
-        <input type="text" id="pasteTarget" placeholder="Paste copied text here (Ctrl+V)..." onpaste="return false;" />
-        <button class="btn-primary" id="btnReadClipboard" style="flex: 0 0 140px; padding: 8px 12px; font-size: 12px;">Read Input</button>
-      </div>
-      <div id="pasteResultText" style="margin-top: 6px; font-size: 12px; color: #38bdf8;"></div>
-    </div>
-
-    <!-- 4. Keyboard Shield Section -->
-    <div class="test-section">
-      <div class="test-section-title">
-        <span>⌨️ Keyboard Shield Tester</span>
-      </div>
-      <div>
-        Last key detected by page: <span id="lastKey" class="val-neutral" style="font-weight: bold;">(None yet)</span>
-      </div>
-      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-        * Normal keys appear. Window management keys (F11, Escape, F1-F12) and copy shortcuts are shielded from page interception.
+        <strong>Author's Note:</strong> Story created by <em>Aria_Moonlight_92</em>. Cross-posted from the archives. Highlight this text, press Ctrl+C, and paste into The Irritating Text Box above!
       </div>
     </div>
 
@@ -302,10 +302,8 @@
     const statStatus = document.getElementById('statStatus');
     const statVis = document.getElementById('statVis');
     const statFocus = document.getElementById('statFocus');
-    const lastKey = document.getElementById('lastKey');
     const logBox = document.getElementById('logBox');
-    const pasteTarget = document.getElementById('pasteTarget');
-    const btnReadClipboard = document.getElementById('btnReadClipboard');
+    const irritatingTextBox = document.getElementById('irritatingTextBox');
     const pasteResultText = document.getElementById('pasteResultText');
     const btnToggleMusic = document.getElementById('btnToggleMusic');
     const musicStatusText = document.getElementById('musicStatusText');
@@ -368,10 +366,24 @@
       updateStatus();
     });
 
-    // Keys
-    window.addEventListener('keydown', (e) => {
-      lastKey.textContent = `"${e.key}" (code: ${e.code})`;
-      log(`Page received keydown: "${e.key}"`);
+    // The Irritating Text Box: Aggressive anti-paste listeners attached by the page
+    irritatingTextBox.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      log('Irritating Text Box attempted to BLOCK paste via preventDefault()!');
+    });
+
+    irritatingTextBox.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        e.stopPropagation();
+        log('Irritating Text Box attempted to BLOCK Ctrl+V keydown!');
+      }
+    });
+
+    irritatingTextBox.addEventListener('input', () => {
+      pasteResultText.textContent = `Contains: "${irritatingTextBox.value}"`;
+      log(`Irritating Text Box received input: "${irritatingTextBox.value.slice(0, 40)}..."`);
     });
 
     // Music Player Simulation
@@ -411,42 +423,22 @@
       }
     });
 
-    // Anti-Music Watchdog (Mimics music apps checking blur and visibilitychange)
     window.addEventListener('blur', () => {
       watchdogDetected.textContent = 'YES (Detected Alt+Tab!)';
       watchdogDetected.className = 'val-false';
-      if (isMusicPlaying) {
-        isMusicPlaying = false;
-        clearInterval(audioInterval);
-        musicStatusText.textContent = 'STOPPED (By Watchdog on Blur)';
-        musicStatusText.className = 'val-false';
-        btnToggleMusic.textContent = '▶ Play Music';
-        log('Watchdog PAUSED music due to blur/Alt+Tab!');
-      }
     });
 
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         watchdogDetected.textContent = 'YES (Detected Tab Switch!)';
         watchdogDetected.className = 'val-false';
-        if (isMusicPlaying) {
-          isMusicPlaying = false;
-          clearInterval(audioInterval);
-          musicStatusText.textContent = 'STOPPED (By Watchdog on Tab Switch)';
-          musicStatusText.className = 'val-false';
-          btnToggleMusic.textContent = '▶ Play Music';
-          log('Watchdog PAUSED music due to tab switch!');
-        }
       }
     });
 
-    btnReadClipboard.addEventListener('click', () => {
-      pasteResultText.textContent = `Input contains: "${pasteTarget.value}"`;
-      log(`Paste verified: "${pasteTarget.value}"`);
-    });
-
-    pasteTarget.addEventListener('input', () => {
-      pasteResultText.textContent = `Input contains: "${pasteTarget.value}"`;
+    window.addEventListener('keydown', (e) => {
+      const el = document.getElementById('lastKey');
+      if (el) el.textContent = e.key;
+      log(`Page detected key: "${e.key}"`);
     });
 
     setInterval(updateStatus, 1000);
