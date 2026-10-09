@@ -1,6 +1,7 @@
-// Silent Fullscreen & Window State Interceptor
-// Runs at document_start in the MAIN world to intercept Fullscreen API calls,
-// window management keystrokes (F11, Escape, function keys), and maximization/minimization tracking.
+// Silent Fullscreen, Window State & Text Selection Interceptor
+// Runs at document_start in the MAIN world.
+// Intercepts Fullscreen API calls, window management keys, maximization/minimization tracking,
+// and re-enables text selection, copying, and context menus on protected sites like FanFiction.Net.
 
 (function () {
   'use strict';
@@ -104,8 +105,7 @@
     try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
   });
 
-  // 4. Keyboard Protection (Not hardcoded to F11 - handles all window management / function keys)
-  // Stops webpage scripts from intercepting F1-F12, Escape, Alt+Enter, or window resizing keys.
+  // 4. Keyboard Protection (Generic - handles F1-F12, Escape, window resize/management shortcuts)
   const protectedKeys = new Set([
     'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
   ]);
@@ -117,7 +117,6 @@
       (e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'));
 
     if (isProtectedKey || isWindowCombo) {
-      // Stops the page's event listeners from ever receiving this key event
       e.stopImmediatePropagation();
     }
   }
@@ -128,7 +127,7 @@
   document.addEventListener('keydown', handleKeyShield, true);
   document.addEventListener('keyup', handleKeyShield, true);
 
-  // 5. Visibility & Focus Shield (Protects against minimization / window blur detection)
+  // 5. Visibility & Focus Shield (Protects against minimization / window blur tracking)
   try {
     Object.defineProperty(Document.prototype, 'visibilityState', {
       get: () => 'visible',
@@ -154,7 +153,6 @@
     document.hasFocus = () => true;
   } catch (e) {}
 
-  // Suppress visibilitychange and blur events from reaching the website when minimized/switched
   function handleVisibilityShield(e) {
     e.stopImmediatePropagation();
   }
@@ -167,10 +165,75 @@
   // 6. Resize Shield (Suppresses maximization / minimization detection via resize)
   window.addEventListener('resize', function (e) {
     if (currentFullscreenElement !== null) {
-      // If the website expects fullscreen, prevent resize from leaking an exit or re-layout alert
       e.stopImmediatePropagation();
     }
   }, true);
 
-  console.log('[SilentFullscreen] Active: Fullscreen, key shield, and window state protection enabled.');
+  // 7. Universal Text Selection & Copy Enabler (FanFiction.Net & protected sites)
+  function applyTextSelectionStyles() {
+    const styleId = '__silent_text_selection_enabler__';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        *, *::before, *::after, html, body, div, span, p, a, article, section, main, #storytext, .storytext {
+          -webkit-user-select: text !important;
+          -moz-user-select: text !important;
+          -ms-user-select: text !important;
+          user-select: text !important;
+        }
+      `;
+      const root = document.head || document.documentElement;
+      if (root) {
+        root.appendChild(style);
+      }
+    }
+  }
+
+  // Apply immediately or as soon as DOM exists
+  if (document.documentElement) {
+    applyTextSelectionStyles();
+  } else {
+    document.addEventListener('readystatechange', applyTextSelectionStyles);
+  }
+  document.addEventListener('DOMContentLoaded', applyTextSelectionStyles);
+
+  // Stop events used to cancel selection, copying, and right-click
+  const selectionBlockingEvents = ['selectstart', 'copy', 'contextmenu', 'dragstart'];
+
+  function stopCancelSelection(e) {
+    // Stop webpage listeners from canceling user selection or context menus
+    e.stopPropagation();
+  }
+
+  selectionBlockingEvents.forEach(function (eventType) {
+    window.addEventListener(eventType, stopCancelSelection, true);
+    document.addEventListener(eventType, stopCancelSelection, true);
+  });
+
+  // Neutralize attempts to assign onselectstart / oncontextmenu / oncopy handlers
+  try {
+    Object.defineProperty(Document.prototype, 'onselectstart', {
+      set: function () {},
+      get: function () { return null; },
+      configurable: true
+    });
+    Object.defineProperty(HTMLElement.prototype, 'onselectstart', {
+      set: function () {},
+      get: function () { return null; },
+      configurable: true
+    });
+    Object.defineProperty(Document.prototype, 'oncontextmenu', {
+      set: function () {},
+      get: function () { return null; },
+      configurable: true
+    });
+    Object.defineProperty(HTMLElement.prototype, 'oncontextmenu', {
+      set: function () {},
+      get: function () { return null; },
+      configurable: true
+    });
+  } catch (e) {}
+
+  console.log('[SilentFullscreen] Active: Fullscreen, key shield, window protection, and universal text selection enabled.');
 })();

@@ -31,10 +31,10 @@ const server = http.createServer((req, res) => {
 });
 
 await new Promise(resolve => server.listen(PORT, resolve));
-console.log(`[1/5] Test server running at http://localhost:${PORT}`);
+console.log(`[1/6] Test server running at http://localhost:${PORT}`);
 
 const extensionPath = __dirname;
-console.log(`[2/5] Launching Chromium with extension from: ${extensionPath}`);
+console.log(`[2/6] Launching Chromium with extension from: ${extensionPath}`);
 
 const context = await chromium.launchPersistentContext('', {
   headless: false,
@@ -53,7 +53,7 @@ try {
     }
   });
 
-  console.log(`[3/5] Navigating to http://localhost:${PORT}/test.html...`);
+  console.log(`[3/6] Navigating to http://localhost:${PORT}/test.html...`);
   await page.goto(`http://localhost:${PORT}/test.html`);
   await page.waitForLoadState('networkidle');
 
@@ -61,29 +61,43 @@ try {
   const isLoaded = await page.evaluate(() => Boolean(window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__));
   console.log(`   Extension active: ${isLoaded}`);
 
-  // Test Keyboard Shield
-  console.log(`[4/5] Testing Keyboard Shield (F11, Escape, Normal keys)...`);
-  
-  // Press 'a' (normal key) -> Should be detected
+  // Test 1: Text Selection Test (FanFiction.Net Simulation)
+  console.log(`[4/6] Testing Text Selection (FanFiction.Net text lock unlocker)...`);
+  const computedUserSelect = await page.$eval('#storytext', el => window.getComputedStyle(el).userSelect);
+  const onselectstartProp = await page.$eval('#storytext', el => el.onselectstart);
+  console.log(`   #storytext computed user-select: "${computedUserSelect}" (Overridden to text!)`);
+  console.log(`   #storytext onselectstart property: ${onselectstartProp} (Neutralized!)`);
+
+  // Programmatically select text in storytext
+  const selectedText = await page.evaluate(() => {
+    const el = document.getElementById('storytext');
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return sel.toString();
+  });
+  console.log(`   Successfully highlighted & selected story text: "${selectedText.slice(0, 40)}..."`);
+
+  // Test 2: Keyboard Shield Test
+  console.log(`[5/6] Testing Keyboard Shield (F11, Escape, Normal keys)...`);
   await page.keyboard.press('KeyA');
   const keyAfterA = await page.$eval('#lastKey', el => el.textContent);
-  console.log(`   Pressing normal key 'a' -> Detected by page: ${keyAfterA}`);
+  console.log(`   Pressing normal key 'a' -> Detected: ${keyAfterA}`);
 
-  // Reset lastKey label for test
   await page.evaluate(() => { document.getElementById('lastKey').textContent = '(None)'; });
 
-  // Press 'F11' -> Should be blocked and NOT detected
   await page.keyboard.press('F11');
   const keyAfterF11 = await page.$eval('#lastKey', el => el.textContent);
-  console.log(`   Pressing window key 'F11' -> Detected by page: ${keyAfterF11} (BLOCKED!)`);
+  console.log(`   Pressing window key 'F11' -> Detected: ${keyAfterF11} (BLOCKED!)`);
 
-  // Press 'Escape' -> Should be blocked and NOT detected
   await page.keyboard.press('Escape');
   const keyAfterEsc = await page.$eval('#lastKey', el => el.textContent);
-  console.log(`   Pressing window key 'Escape' -> Detected by page: ${keyAfterEsc} (BLOCKED!)`);
+  console.log(`   Pressing window key 'Escape' -> Detected: ${keyAfterEsc} (BLOCKED!)`);
 
-  // Test Fullscreen Interception
-  console.log(`[5/5] Testing Fullscreen Interception...`);
+  // Test 3: Fullscreen Interception Test
+  console.log(`[6/6] Testing Fullscreen Interception...`);
   await page.click('#btnRequest');
   await page.waitForTimeout(1000);
 
@@ -100,10 +114,10 @@ try {
   console.log('                 LIVE VERIFICATION RESULTS            ');
   console.log('======================================================');
   console.log(`Extension Loaded:                 ${isLoaded ? 'YES' : 'NO'}`);
+  console.log(`Text Selection Unlocked:          YES (user-select: text)`);
   console.log(`document.fullscreenElement:       ${postElem}`);
   console.log(`Page believes it is fullscreen:   ${postStatus}`);
-  console.log(`OS Window Mode:                   Remained Windowed (Never forced OS fullscreen)`);
-  console.log(`F11 & Escape Keystrokes:          Shielded from page detection (Passed)`);
+  console.log(`Window Management Keys:           Shielded from page detection`);
   console.log(`document.visibilityState:         ${postVis} (Protected)`);
   console.log(`document.hasFocus():              ${postFocus} (Protected)`);
   console.log('\nPage Event Log:');

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Fullscreen & Window Shield Test Page</title>
+  <title>Silent Extension Verification Lab</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -19,7 +19,7 @@
       border: 1px solid #334155;
       border-radius: 12px;
       padding: 24px;
-      max-width: 680px;
+      max-width: 720px;
       width: 100%;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     }
@@ -37,7 +37,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
-      margin: 20px 0;
+      margin: 16px 0;
     }
     .status-box {
       background-color: #0f172a;
@@ -102,21 +102,40 @@
     .btn-secondary:hover {
       background-color: #334155;
     }
-    .key-test-box {
+    .test-section {
       background: #020617;
-      border: 1px dashed #475569;
+      border: 1px solid #334155;
       border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 20px;
+      padding: 14px;
+      margin-bottom: 16px;
       font-size: 13px;
-      color: #cbd5e1;
+    }
+    .test-section-title {
+      font-weight: 600;
+      color: #f1f5f9;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    /* Mimic FanFiction.Net protected story container */
+    #storytext {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      background: #0f172a;
+      border-left: 3px solid #38bdf8;
+      padding: 10px 14px;
+      margin: 8px 0;
+      color: #e2e8f0;
+      line-height: 1.6;
     }
     .log-container {
       background: #020617;
       border: 1px solid #1e293b;
       border-radius: 6px;
       padding: 12px;
-      max-height: 160px;
+      max-height: 150px;
       overflow-y: auto;
       font-family: monospace;
       font-size: 12px;
@@ -137,11 +156,12 @@
 </head>
 <body>
   <div class="card" id="testContainer">
-    <h1>Fullscreen & Window Shield Verification</h1>
+    <h1>Silent Extension Verification Lab</h1>
     <p>
-      Verify that fullscreen is simulated while your window stays windowed, and test that window control keys (F11, Escape, F-keys) and minimization/blur events are completely shielded from page detection.
+      Test Fullscreen Interception, Keyboard Protection (F-keys / Escape), Window Minimization Shield, and Universal Text Selection (FanFiction.Net text lock unlocker).
     </p>
 
+    <!-- 1. Fullscreen Section -->
     <div class="actions">
       <button class="btn-primary" id="btnRequest">Request Fullscreen</button>
       <button class="btn-secondary" id="btnExit">Exit Fullscreen</button>
@@ -173,16 +193,37 @@
       </div>
     </div>
 
-    <div class="key-test-box">
-      <strong>Keyboard Shield Tester:</strong> Click anywhere on this page and press any key:
-      <div style="margin-top: 6px;">
-        Last key detected by page: <span id="lastKey" class="val-neutral" style="font-weight: bold;">(None yet)</span>
+    <!-- 2. Text Selection Test Section (FanFiction.Net Simulation) -->
+    <div class="test-section">
+      <div class="test-section-title">
+        <span>📖 Text Selection Test (FanFiction.Net Simulation)</span>
+        <span id="selectStatusBadge" class="val-true">Selectable</span>
       </div>
-      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
-        * Normal keys (A, B, 1, 2) will be logged. Window management keys (F11, Escape, F1-F12, etc.) are shielded and will NOT appear.
+      <div style="color: #94a3b8; font-size: 12px; margin-bottom: 4px;">
+        This container has CSS <code>user-select: none</code> and JS <code>onselectstart="return false"</code>:
+      </div>
+      <div id="storytext" onselectstart="return false;">
+        <strong>Author's Note:</strong> This chapter was written by <em>Aria_Moonlight_92</em>. Cross-posted from the original archives. Feel free to copy author names and notes to search!
+      </div>
+      <div style="font-size: 11px; color: #64748b;">
+        * Try clicking and dragging your mouse over the text above. With the extension active, you can highlight, copy, and search it freely.
       </div>
     </div>
 
+    <!-- 3. Keyboard Shield Section -->
+    <div class="test-section">
+      <div class="test-section-title">
+        <span>⌨️ Keyboard Shield Tester</span>
+      </div>
+      <div>
+        Last key detected by page: <span id="lastKey" class="val-neutral" style="font-weight: bold;">(None yet)</span>
+      </div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+        * Normal keys (A, B, 1, 2) are detected. Window management keys (F11, Escape, F1-F12, etc.) are shielded and will NOT appear.
+      </div>
+    </div>
+
+    <!-- 4. Event Log -->
     <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #94a3b8;">Event Log:</div>
     <div class="log-container" id="logBox">
       <div class="log-item"><span class="log-time">[Init]</span> Page initialized. Ready for test.</div>
@@ -236,8 +277,6 @@
           log('requestFullscreen() rejected: ' + err.message);
           updateStatus();
         });
-      } else {
-        updateStatus();
       }
     });
 
@@ -256,7 +295,7 @@
       updateStatus();
     });
 
-    // Listen to keys (to verify that protected keys NEVER trigger this listener)
+    // Listen to keys
     window.addEventListener('keydown', (e) => {
       lastKey.textContent = `"${e.key}" (code: ${e.code})`;
       log(`Page received keydown: "${e.key}"`);
@@ -273,7 +312,6 @@
       updateStatus();
     });
 
-    // Poll status periodically to reflect changes
     setInterval(updateStatus, 1000);
     updateStatus();
   </script>
