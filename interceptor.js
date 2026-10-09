@@ -1,19 +1,22 @@
-// Silent Fullscreen, Window State, Text Selection & Universal Clipboard Interceptor
+// DRDOOM - Silent Browser Enhancement & Research Suite
 // Runs at document_start in the MAIN world.
-// Intercepts Fullscreen API calls, window management keys, maximization/minimization tracking,
-// and guarantees universal text selection, copying (Ctrl+C), and pasting (Ctrl+V) across all sites.
+// Intercepts Fullscreen API, shields window keys, protects against tab/app switch detection (Alt+Tab),
+// enables universal text selection (FanFiction.Net), and forces universal clipboard (Copy/Paste).
 
 (function () {
   'use strict';
 
-  if (window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__) {
+  if (window.__DRDOOM_LOADED__) {
     return;
   }
+  window.__DRDOOM_LOADED__ = true;
   window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__ = true;
 
   let currentFullscreenElement = null;
 
-  // 1. Fullscreen Event Dispatcher
+  // ==========================================
+  // 1. FULLSCREEN API INTERCEPTION
+  // ==========================================
   function dispatchFullscreenEvents() {
     const eventNames = [
       'fullscreenchange',
@@ -37,7 +40,6 @@
     });
   }
 
-  // 2. Mock requestFullscreen & exitFullscreen
   function mockRequestFullscreen() {
     currentFullscreenElement = this;
     queueMicrotask(function () {
@@ -81,8 +83,7 @@
     } catch (e) {}
   });
 
-  // 3. Define property getters for Fullscreen on Document
-  const propertyDefinitions = {
+  const fsPropertyDefinitions = {
     fullscreenElement: () => currentFullscreenElement,
     webkitFullscreenElement: () => currentFullscreenElement,
     mozFullScreenElement: () => currentFullscreenElement,
@@ -95,9 +96,9 @@
     webkitIsFullScreen: () => currentFullscreenElement !== null
   };
 
-  Object.keys(propertyDefinitions).forEach(function (prop) {
+  Object.keys(fsPropertyDefinitions).forEach(function (prop) {
     const descriptor = {
-      get: propertyDefinitions[prop],
+      get: fsPropertyDefinitions[prop],
       configurable: true,
       enumerable: true
     };
@@ -105,7 +106,9 @@
     try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
   });
 
-  // 4. Keyboard Protection (Generic - handles F1-F12, Escape, window shortcuts, and shields Ctrl+C / Ctrl+V)
+  // ==========================================
+  // 2. WINDOW & KEYBOARD SHIELD (F-keys, Escape, Ctrl+C/V)
+  // ==========================================
   const protectedKeys = new Set([
     'Escape', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'
   ]);
@@ -116,7 +119,7 @@
     const isWindowCombo = (e.altKey && (e.key === 'Enter' || e.key === 'F11')) ||
       (e.metaKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown'));
     
-    // Also protect clipboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Insert, Shift+Insert) from website interception
+    // Shield clipboard shortcuts from page interception
     const isClipboardShortcut = (e.ctrlKey || e.metaKey) && (
       e.key === 'c' || e.key === 'C' ||
       e.key === 'x' || e.key === 'X' ||
@@ -125,7 +128,6 @@
     );
 
     if (isProtectedKey || isWindowCombo || isClipboardShortcut) {
-      // Stops the page's event listeners from blocking or hijacking the key action
       e.stopImmediatePropagation();
     }
   }
@@ -136,7 +138,10 @@
   document.addEventListener('keydown', handleKeyShield, true);
   document.addEventListener('keyup', handleKeyShield, true);
 
-  // 5. Visibility & Focus Shield (Protects against minimization / window blur tracking)
+  // ==========================================
+  // 3. TAB & APP SWITCH PROTECTION (ALT+TAB & BACKGROUND AUDIO SHIELD)
+  // ==========================================
+  // Locks visibility and focus so music players and websites never detect tab changes or Alt+Tab
   try {
     Object.defineProperty(Document.prototype, 'visibilityState', {
       get: () => 'visible',
@@ -162,25 +167,42 @@
     document.hasFocus = () => true;
   } catch (e) {}
 
-  function handleVisibilityShield(e) {
+  // Stop visibilitychange, blur, focusout, and pagehide from alerting the page
+  function handleTabAndAppShield(e) {
     e.stopImmediatePropagation();
   }
 
-  window.addEventListener('visibilitychange', handleVisibilityShield, true);
-  document.addEventListener('visibilitychange', handleVisibilityShield, true);
-  window.addEventListener('blur', handleVisibilityShield, true);
-  window.addEventListener('focusout', handleVisibilityShield, true);
+  window.addEventListener('visibilitychange', handleTabAndAppShield, true);
+  document.addEventListener('visibilitychange', handleTabAndAppShield, true);
+  window.addEventListener('blur', handleTabAndAppShield, true);
+  document.addEventListener('blur', handleTabAndAppShield, true);
+  window.addEventListener('focusout', handleTabAndAppShield, true);
+  document.addEventListener('focusout', handleTabAndAppShield, true);
+  window.addEventListener('pagehide', handleTabAndAppShield, true);
 
-  // 6. Resize Shield (Suppresses maximization / minimization detection via resize)
+  // Neutralize inline handler properties on prototypes
+  const tabBlockedProps = ['onblur', 'onfocusout', 'onvisibilitychange', 'onpagehide'];
+  tabBlockedProps.forEach(function (prop) {
+    try {
+      Object.defineProperty(window, prop, { get: () => null, set: () => {}, configurable: true });
+      Object.defineProperty(document, prop, { get: () => null, set: () => {}, configurable: true });
+      Object.defineProperty(Document.prototype, prop, { get: () => null, set: () => {}, configurable: true });
+      Object.defineProperty(HTMLElement.prototype, prop, { get: () => null, set: () => {}, configurable: true });
+    } catch (e) {}
+  });
+
+  // Window resize shield: prevents maximizing/minimizing window from triggering fullscreen exit alerts
   window.addEventListener('resize', function (e) {
     if (currentFullscreenElement !== null) {
       e.stopImmediatePropagation();
     }
   }, true);
 
-  // 7. Universal Text Selection Enabler (CSS Overrides)
+  // ==========================================
+  // 4. UNIVERSAL TEXT SELECTION ENABLER
+  // ==========================================
   function applyTextSelectionStyles() {
-    const styleId = '__silent_text_selection_enabler__';
+    const styleId = '__drdoom_text_selection_enabler__';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
       style.id = styleId;
@@ -206,8 +228,9 @@
   }
   document.addEventListener('DOMContentLoaded', applyTextSelectionStyles);
 
-  // 8. Universal Clipboard Force-Sync Engine (Copy & Paste Unblocker)
-  // Handles copy: extracts selected text and writes directly to clipboardData, stopping website cancellation scripts
+  // ==========================================
+  // 5. UNIVERSAL CLIPBOARD FORCE-SYNC ENGINE (COPY & PASTE)
+  // ==========================================
   function handleForceCopy(e) {
     e.stopImmediatePropagation();
 
@@ -218,59 +241,37 @@
       if (e.clipboardData) {
         e.clipboardData.clearData();
         e.clipboardData.setData('text/plain', text);
-        // preventDefault tells the browser not to execute any remaining handlers and use our explicit setData
         e.preventDefault();
       }
     }
   }
 
-  // Handles paste: stops website scripts from preventing paste into inputs / forms
   function handleForcePaste(e) {
     e.stopImmediatePropagation();
   }
 
-  // Handles cut: writes selection to clipboard
-  function handleForceCut(e) {
-    handleForceCopy(e);
-  }
-
-  // Stops event cancellations for selectstart, contextmenu (right click), dragstart
   function handleGenericAllow(e) {
     e.stopPropagation();
   }
 
-  // Attach in capture phase on both window and document
   window.addEventListener('copy', handleForceCopy, true);
   document.addEventListener('copy', handleForceCopy, true);
-
-  window.addEventListener('cut', handleForceCut, true);
-  document.addEventListener('cut', handleForceCut, true);
-
+  window.addEventListener('cut', handleForceCopy, true);
+  document.addEventListener('cut', handleForceCopy, true);
   window.addEventListener('paste', handleForcePaste, true);
   document.addEventListener('paste', handleForcePaste, true);
-
   window.addEventListener('selectstart', handleGenericAllow, true);
   document.addEventListener('selectstart', handleGenericAllow, true);
-
   window.addEventListener('contextmenu', handleGenericAllow, true);
   document.addEventListener('contextmenu', handleGenericAllow, true);
 
-  // Neutralize inline handler properties on prototypes
-  const blockedHandlerProps = ['onselectstart', 'oncontextmenu', 'oncopy', 'oncut', 'onpaste', 'ondragstart'];
-  blockedHandlerProps.forEach(function (prop) {
+  const blockedClipboardProps = ['onselectstart', 'oncontextmenu', 'oncopy', 'oncut', 'onpaste', 'ondragstart'];
+  blockedClipboardProps.forEach(function (prop) {
     try {
-      Object.defineProperty(Document.prototype, prop, {
-        set: function () {},
-        get: function () { return null; },
-        configurable: true
-      });
-      Object.defineProperty(HTMLElement.prototype, prop, {
-        set: function () {},
-        get: function () { return null; },
-        configurable: true
-      });
+      Object.defineProperty(Document.prototype, prop, { set: () => {}, get: () => null, configurable: true });
+      Object.defineProperty(HTMLElement.prototype, prop, { set: () => {}, get: () => null, configurable: true });
     } catch (e) {}
   });
 
-  console.log('[SilentFullscreen] Active: Fullscreen, key shield, window protection, universal text selection, and universal clipboard (Copy/Paste) enabled.');
+  console.log('[DRDOOM] Active: Fullscreen interception, window keys, tab/app switch protection, text selection, and universal clipboard active.');
 })();

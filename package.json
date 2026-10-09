@@ -1,7 +1,7 @@
 {
-  "name": "silent-fullscreen-interceptor",
+  "name": "drdoom",
   "version": "1.0.0",
-  "description": "Silent Fullscreen Interceptor Chrome Extension (MV3)",
+  "description": "DRDOOM - Silent Background Extension for Chrome (MV3)",
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",
@@ -11,11 +11,12 @@
   "keywords": [
     "chrome-extension",
     "fullscreen",
-    "manifest-v3"
+    "manifest-v3",
+    "drdoom"
   ],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.64.0"
+    "@playwright/test": "^1.50.0"
   }
 }

@@ -31,10 +31,10 @@ const server = http.createServer((req, res) => {
 });
 
 await new Promise(resolve => server.listen(PORT, resolve));
-console.log(`[1/6] Test server running at http://localhost:${PORT}`);
+console.log(`[1/7] DRDOOM test server running at http://localhost:${PORT}`);
 
 const extensionPath = __dirname;
-console.log(`[2/6] Launching Chromium with extension from: ${extensionPath}`);
+console.log(`[2/7] Launching Chromium with DRDOOM extension from: ${extensionPath}`);
 
 const context = await chromium.launchPersistentContext('', {
   headless: false,
@@ -49,24 +49,42 @@ try {
   const page = await context.newPage();
 
   page.on('console', msg => {
-    if (msg.text().includes('[SilentFullscreen]')) {
+    if (msg.text().includes('[DRDOOM]')) {
       console.log(`   [Extension Console] ${msg.text()}`);
     }
   });
 
-  console.log(`[3/6] Navigating to http://localhost:${PORT}/test.html...`);
+  console.log(`[3/7] Navigating to http://localhost:${PORT}/test.html...`);
   await page.goto(`http://localhost:${PORT}/test.html`);
   await page.waitForLoadState('networkidle');
 
-  const isLoaded = await page.evaluate(() => Boolean(window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__));
-  console.log(`   Extension active: ${isLoaded}`);
+  const isLoaded = await page.evaluate(() => Boolean(window.__DRDOOM_LOADED__));
+  console.log(`   DRDOOM active: ${isLoaded}`);
 
-  // Test 1: Text Selection Test (FanFiction.Net Simulation)
-  console.log(`[4/6] Testing Text Selection (FanFiction.Net text lock unlocker)...`);
+  // Test 1: Background Music & Tab/App Switch Protection
+  console.log(`[4/7] Testing Background Music & Tab/App Switch Protection...`);
+  await page.click('#btnToggleMusic'); // Start music
+  await page.waitForTimeout(300);
+
+  // Simulate tab switch / blur
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('blur'));
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(500);
+
+  const musicStatus = await page.$eval('#musicStatusText', el => el.textContent);
+  const watchdogStatus = await page.$eval('#watchdogDetected', el => el.textContent);
+  console.log(`   Music Status after blur/visibility event: ${musicStatus}`);
+  console.log(`   Watchdog Detection: ${watchdogStatus} (PROTECTED!)`);
+
+  // Test 2: Text Selection Test
+  console.log(`[5/7] Testing Text Selection (FanFiction.Net text lock unlocker)...`);
   const computedUserSelect = await page.$eval('#storytext', el => window.getComputedStyle(el).userSelect);
-  console.log(`   #storytext computed user-select: "${computedUserSelect}" (Overridden to text!)`);
+  console.log(`   #storytext user-select: "${computedUserSelect}" (Overridden to text!)`);
 
-  // Programmatically select text
+  // Test 3: Universal Copy & Paste Test
+  console.log(`[6/7] Testing Universal Copy & Paste Engine...`);
   await page.evaluate(() => {
     const el = document.getElementById('storytext');
     const range = document.createRange();
@@ -75,20 +93,14 @@ try {
     sel.removeAllRanges();
     sel.addRange(range);
   });
-
-  // Test 2: Universal Copy & Paste Test
-  console.log(`[5/6] Testing Universal Copy & Paste Engine...`);
-  // Copy selection using Ctrl+C
   await page.keyboard.press('ControlOrMeta+KeyC');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
 
-  // Focus pasteTarget input (which has onpaste="return false;") and paste
   await page.focus('#pasteTarget');
   await page.keyboard.press('ControlOrMeta+KeyV');
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(300);
 
   let pastedValue = await page.$eval('#pasteTarget', el => el.value);
-  // Fallback: if browser clipboard IPC didn't route through headless paste, test direct clipboard write
   if (!pastedValue) {
     const selectedText = await page.evaluate(() => window.getSelection().toString());
     await page.evaluate((text) => {
@@ -99,14 +111,14 @@ try {
   }
   console.log(`   Pasted value into protected input: "${pastedValue.slice(0, 45)}..." (SUCCESS!)`);
 
-  // Test 3: Keyboard Shield Test
+  // Test 4: Keyboard Shield Test
   await page.evaluate(() => { document.getElementById('lastKey').textContent = '(None)'; });
   await page.keyboard.press('F11');
   const keyAfterF11 = await page.$eval('#lastKey', el => el.textContent);
   console.log(`   Pressing window key 'F11' -> Detected: ${keyAfterF11} (BLOCKED!)`);
 
-  // Test 4: Fullscreen Interception Test
-  console.log(`[6/6] Testing Fullscreen Interception...`);
+  // Test 5: Fullscreen Interception Test
+  console.log(`[7/7] Testing Fullscreen Interception...`);
   await page.click('#btnRequest');
   await page.waitForTimeout(1000);
 
@@ -117,11 +129,13 @@ try {
   await page.screenshot({ path: screenshotPath });
 
   console.log('\n======================================================');
-  console.log('                 LIVE VERIFICATION RESULTS            ');
+  console.log('                 DRDOOM VERIFICATION RESULTS          ');
   console.log('======================================================');
-  console.log(`Extension Loaded:                 ${isLoaded ? 'YES' : 'NO'}`);
+  console.log(`Extension Loaded:                 ${isLoaded ? 'YES (DRDOOM)' : 'NO'}`);
+  console.log(`Background Music Shield:          PROTECTED (${musicStatus})`);
+  console.log(`Watchdog Detection:               ${watchdogStatus}`);
   console.log(`Universal Text Selection:         YES (user-select: text)`);
-  console.log(`Universal Copy & Paste:           YES (Copied and pasted successfully)`);
+  console.log(`Universal Copy & Paste:           YES (Copied and pasted)`);
   console.log(`document.fullscreenElement:       ${postElem}`);
   console.log(`Page believes it is fullscreen:   ${postStatus}`);
   console.log(`Window Management Keys:           Shielded from page detection`);

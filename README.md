@@ -1,29 +1,50 @@
-# Silent Fullscreen Interceptor
+# DRDOOM
 
-A zero-UI, zero-configuration Chrome Extension (Manifest V3) that silently intercepts Fullscreen API calls.
+A silent, zero-UI Chrome Extension (Manifest V3) that runs in the background to provide full browser control and protection across all websites.
 
-## What it does
-- **No Popups / No Configuration:** Works automatically in the background across all pages.
-- **Prevents OS-level Fullscreen:** When a website or button requests fullscreen, your browser window stays windowed so you can continue inspecting, switching tabs, and checking other windows.
-- **Keeps Website Happy:** The page's `requestFullscreen()` Promise resolves immediately, `document.fullscreenElement` reports the element, and `fullscreenchange` events fire normally.
+## Core Capabilities
 
-## Quick Installation
+1. **Fullscreen Interception:**
+   - When a website or button requests fullscreen, your browser window **remains windowed**.
+   - The page receives a resolved promise, `document.fullscreenElement` reports the element, and `fullscreenchange` fires normally.
+2. **Tab & App Switch Protection (Background Music Shield):**
+   - Locks `document.visibilityState` to `"visible"` and `document.hidden` to `false`.
+   - Locks `document.hasFocus()` to `true`.
+   - Traps and suppresses `blur`, `focusout`, and `visibilitychange` events in the capture phase.
+   - **Result:** Music apps, audio players, and websites never detect when you switch tabs or Alt+Tab to another desktop app—music keeps playing continuously!
+3. **Universal Text Selection (FanFiction.Net Unblocker):**
+   - Injects high-priority CSS `user-select: text !important` across all elements (including `#storytext`).
+   - Neutralizes `onselectstart`, allowing you to highlight, drag, and search any text or author notes.
+4. **Universal Clipboard Engine (Copy & Paste):**
+   - Traps `copy` and `cut` events in capture phase and forces selected text into `clipboardData`.
+   - Shields `Ctrl+C` / `Ctrl+V` keystrokes from website cancellation scripts.
+   - Neutralizes anti-paste scripts (`onpaste="return false;"`) so you can paste anywhere.
+5. **Window Management Key Shield:**
+   - Traps all function keys (`F1`-`F12`), `Escape`, and window resize shortcuts before page scripts can intercept them.
 
-1. Open Google Chrome.
-2. Navigate to `chrome://extensions`.
-3. Enable **Developer mode** using the toggle in the top-right corner.
-4. Click **Load unpacked** (top-left button).
-5. Select this directory:
+---
+
+## Quick Installation in Google Chrome
+
+1. Open Chrome and navigate to:
+   ```text
+   chrome://extensions
    ```
+2. Enable **Developer mode** (toggle in the top-right corner).
+3. Click **Load unpacked** (top-left button).
+4. Select this directory:
+   ```text
    D:\Github\KillerExtention
    ```
-6. The extension is now active!
+5. **DRDOOM** is now loaded and running silently!
 
-## How to Test It
+---
 
-1. Open [test.html](file:///d:/Github/KillerExtention/test.html) directly in Chrome (or drag and drop it into a Chrome tab).
-2. Click **"Request Fullscreen"**.
-3. **Observation:**
-   - The status changes to `Page believes it is fullscreen: Yes`.
-   - The event log displays `fullscreenchange` and resolved Promise.
-   - The browser window **remains windowed** and never takes over your monitor.
+## Local Verification Lab
+
+1. Start the local server:
+   ```bash
+   npm run dev
+   ```
+2. Open `http://localhost:5173/` in Chrome.
+3. Test background music, text selection, copy/paste, keyboard shield, and fullscreen simulation!
