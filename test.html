@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fullscreen Interceptor Test Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 40px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 650px;
+      width: 100%;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 22px;
+      color: #38bdf8;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .status-box {
+      background-color: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .status-row:last-child {
+      margin-bottom: 0;
+    }
+    .val-true {
+      color: #4ade80;
+      font-weight: bold;
+    }
+    .val-false {
+      color: #f87171;
+      font-weight: bold;
+    }
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    button {
+      flex: 1;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-primary {
+      background-color: #2563eb;
+      color: white;
+    }
+    .btn-primary:hover {
+      background-color: #1d4ed8;
+    }
+    .btn-secondary {
+      background-color: #475569;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background-color: #334155;
+    }
+    .log-container {
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 12px;
+      max-height: 160px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .log-item {
+      padding: 4px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .log-item:last-child {
+      border-bottom: none;
+    }
+    .log-time {
+      color: #64748b;
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card" id="testContainer">
+    <h1>Fullscreen Interceptor Verification</h1>
+    <p>
+      Click <strong>"Request Fullscreen"</strong> below. When the extension is loaded, the page will report that it is in fullscreen, but your browser window will <strong>stay windowed</strong> without taking over the screen.
+    </p>
+
+    <div class="actions">
+      <button class="btn-primary" id="btnRequest">Request Fullscreen</button>
+      <button class="btn-secondary" id="btnExit">Exit Fullscreen</button>
+    </div>
+
+    <div class="status-box">
+      <div class="status-row">
+        <span>document.fullscreenElement:</span>
+        <span id="statFsElem">null</span>
+      </div>
+      <div class="status-row">
+        <span>document.fullscreenEnabled:</span>
+        <span id="statFsEnabled">true</span>
+      </div>
+      <div class="status-row">
+        <span>Page believes it is fullscreen:</span>
+        <span id="statStatus" class="val-false">No</span>
+      </div>
+    </div>
+
+    <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #94a3b8;">Event Log:</div>
+    <div class="log-container" id="logBox">
+      <div class="log-item"><span class="log-time">[Init]</span> Page loaded. Ready for test.</div>
+    </div>
+  </div>
+
+  <script>
+    const btnRequest = document.getElementById('btnRequest');
+    const btnExit = document.getElementById('btnExit');
+    const statFsElem = document.getElementById('statFsElem');
+    const statFsEnabled = document.getElementById('statFsEnabled');
+    const statStatus = document.getElementById('statStatus');
+    const logBox = document.getElementById('logBox');
+
+    function log(msg) {
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+      logBox.appendChild(div);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function updateStatus() {
+      const el = document.fullscreenElement || document.webkitFullscreenElement;
+      statFsElem.textContent = el ? `${el.tagName}#${el.id || 'anonymous'}` : 'null';
+      statFsEnabled.textContent = String(document.fullscreenEnabled);
+
+      if (el) {
+        statStatus.textContent = 'Yes (Simulated / Intercepted)';
+        statStatus.className = 'val-true';
+      } else {
+        statStatus.textContent = 'No';
+        statStatus.className = 'val-false';
+      }
+    }
+
+    btnRequest.addEventListener('click', () => {
+      log('User clicked Request Fullscreen...');
+      const target = document.getElementById('testContainer');
+
+      const p = target.requestFullscreen ? target.requestFullscreen() : target.webkitRequestFullscreen();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          log('requestFullscreen() Promise resolved successfully!');
+          updateStatus();
+        }).catch((err) => {
+          log('requestFullscreen() rejected: ' + err.message);
+          updateStatus();
+        });
+      } else {
+        log('requestFullscreen() called (synchronous).');
+        updateStatus();
+      }
+    });
+
+    btnExit.addEventListener('click', () => {
+      log('User clicked Exit Fullscreen...');
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          log('exitFullscreen() resolved.');
+          updateStatus();
+        }).catch((err) => {
+          log('exitFullscreen() rejected: ' + err.message);
+          updateStatus();
+        });
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+        updateStatus();
+      }
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      log('Received event: "fullscreenchange"');
+      updateStatus();
+    });
+
+    document.addEventListener('webkitfullscreenchange', () => {
+      log('Received event: "webkitfullscreenchange"');
+      updateStatus();
+    });
+
+    // Initial check
+    updateStatus();
+  </script>
+</body>
+</html>
