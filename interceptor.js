@@ -15,7 +15,43 @@
   let currentFullscreenElement = null;
 
   // ==========================================
-  // 1. FULLSCREEN API INTERCEPTION
+  // BRIDGE COMMUNICATION (MAIN WORLD -> ISOLATED BRIDGE -> BACKGROUND)
+  // ==========================================
+  function sendBridgeAction(action) {
+    try {
+      window.dispatchEvent(new CustomEvent('__DRDOOM_BRIDGE_EVENT__', {
+        detail: { action: action }
+      }));
+    } catch (e) {}
+  }
+
+  // Inject full-viewport pseudo-fullscreen styles for target element
+  function applyFullscreenElementStyles() {
+    const styleId = '__drdoom_fullscreen_styles__';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        [data-drdoom-fullscreen="true"] {
+          position: fixed !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          max-width: 100vw !important;
+          max-height: 100vh !important;
+          z-index: 2147483647 !important;
+          margin: 0 !important;
+          box-sizing: border-box !important;
+        }
+      `;
+      const root = document.head || document.documentElement;
+      if (root) root.appendChild(style);
+    }
+  }
+
+  // ==========================================
+  // 1. FULLSCREEN API & MAXIMIZATION SPOOFER
   // ==========================================
   function dispatchFullscreenEvents() {
     const eventNames = [
@@ -42,6 +78,17 @@
 
   function mockRequestFullscreen() {
     currentFullscreenElement = this;
+
+    // 1. Visually maximize the element to fill the viewport
+    applyFullscreenElementStyles();
+    try {
+      this.setAttribute('data-drdoom-fullscreen', 'true');
+    } catch (e) {}
+
+    // 2. Maximize the Chrome browser window via bridge
+    sendBridgeAction('MAXIMIZE');
+
+    // 3. Dispatch fullscreenchange so website believes it is in true fullscreen
     queueMicrotask(function () {
       dispatchFullscreenEvents();
     });
@@ -62,7 +109,11 @@
   });
 
   function mockExitFullscreen() {
+    if (currentFullscreenElement && typeof currentFullscreenElement.removeAttribute === 'function') {
+      try { currentFullscreenElement.removeAttribute('data-drdoom-fullscreen'); } catch (e) {}
+    }
     currentFullscreenElement = null;
+    sendBridgeAction('RESTORE');
     queueMicrotask(function () {
       dispatchFullscreenEvents();
     });
@@ -106,6 +157,32 @@
     try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
   });
 
+  // Viewport / Screen dimension spoofing (passes innerHeight === screen.height tests)
+  try {
+    const origInnerW = Object.getOwnPropertyDescriptor(window, 'innerWidth') || { get: () => window.innerWidth };
+    const origInnerH = Object.getOwnPropertyDescriptor(window, 'innerHeight') || { get: () => window.innerHeight };
+
+    Object.defineProperty(window, 'innerWidth', {
+      get: function () {
+        if (currentFullscreenElement !== null && window.screen) {
+          return window.screen.width;
+        }
+        return origInnerW.get ? origInnerW.get.call(window) : window.outerWidth;
+      },
+      configurable: true
+    });
+
+    Object.defineProperty(window, 'innerHeight', {
+      get: function () {
+        if (currentFullscreenElement !== null && window.screen) {
+          return window.screen.height;
+        }
+        return origInnerH.get ? origInnerH.get.call(window) : window.outerHeight;
+      },
+      configurable: true
+    });
+  } catch (e) {}
+
   // ==========================================
   // 2. WINDOW & KEYBOARD SHIELD (F-keys, Escape, Ctrl+C/V)
   // ==========================================
@@ -126,6 +203,26 @@
       e.key === 'v' || e.key === 'V' ||
       e.key === 'Insert'
     );
+
+    // Escape Key User Control: Restore/Minimize without notifying the website!
+    if (e.key === 'Escape' && e.type === 'keydown') {
+      e.stopImmediatePropagation();
+
+      if (e.shiftKey) {
+        // Shift+Escape: Minimize window to taskbar
+        sendBridgeAction('MINIMIZE');
+      } else {
+        // Normal Escape: Restore window and un-expand visual lock for the user
+        if (currentFullscreenElement && typeof currentFullscreenElement.removeAttribute === 'function') {
+          try { currentFullscreenElement.removeAttribute('data-drdoom-fullscreen'); } catch (err) {}
+        }
+        sendBridgeAction('RESTORE');
+      }
+
+      // CRITICAL: We deliberately do NOT clear currentFullscreenElement!
+      // The website's document.fullscreenElement remains active, and NO exit event is fired!
+      return;
+    }
 
     if (isProtectedKey || isWindowCombo || isClipboardShortcut) {
       e.stopImmediatePropagation();

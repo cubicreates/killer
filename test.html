@@ -222,6 +222,10 @@
           <span>Page thinks Fullscreen:</span>
           <span id="statStatus" class="val-false">No</span>
         </div>
+        <div class="status-row">
+          <span>Visual View:</span>
+          <span id="statVisualFs" class="val-neutral">Normal</span>
+        </div>
       </div>
 
       <div class="status-box">
@@ -328,6 +332,18 @@
       } else {
         statStatus.textContent = 'No';
         statStatus.className = 'val-false';
+      }
+
+      const visualEl = document.querySelector('[data-drdoom-fullscreen="true"]');
+      const statVisualFs = document.getElementById('statVisualFs');
+      if (statVisualFs) {
+        if (visualEl) {
+          statVisualFs.textContent = 'Maximized (Active)';
+          statVisualFs.className = 'val-true';
+        } else {
+          statVisualFs.textContent = el ? 'Restored (Spoofed!)' : 'Normal';
+          statVisualFs.className = el ? 'val-true' : 'val-neutral';
+        }
       }
 
       statVis.textContent = document.visibilityState;

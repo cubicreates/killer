@@ -118,13 +118,32 @@ try {
   const keyAfterF11 = await page.$eval('#lastKey', el => el.textContent);
   console.log(`   Pressing window key 'F11' -> Detected: ${keyAfterF11} (BLOCKED!)`);
 
-  // Test 5: Fullscreen Interception Test
-  console.log(`[7/7] Testing Fullscreen Interception...`);
+  // Test 5: Fullscreen Interception & Escape Spoofing Test
+  console.log(`[7/7] Testing Fullscreen Interception & Escape Spoofing...`);
   await page.click('#btnRequest');
   await page.waitForTimeout(1000);
 
   const postElem = await page.$eval('#statFsElem', el => el.textContent);
   const postStatus = await page.$eval('#statStatus', el => el.textContent);
+  console.log(`   After requestFullscreen -> fullscreenElement: ${postElem}, Page thinks Fullscreen: ${postStatus}`);
+
+  // Test Escape key user control without notifying website:
+  console.log(`   Pressing 'Escape' to restore window view...`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  await page.evaluate(() => updateStatus());
+
+  const afterEscElem = await page.$eval('#statFsElem', el => el.textContent);
+  const afterEscStatus = await page.$eval('#statStatus', el => el.textContent);
+  const afterEscVisual = await page.$eval('#statVisualFs', el => el.textContent);
+  const afterEscKey = await page.$eval('#lastKey', el => el.textContent);
+  const isInnerHeightSpoofed = await page.evaluate(() => window.innerHeight === window.screen.height);
+
+  console.log(`   After Escape -> fullscreenElement: ${afterEscElem} (STILL ACTIVE!)`);
+  console.log(`   After Escape -> Page thinks Fullscreen: ${afterEscStatus} (PAGE IS BLINDED!)`);
+  console.log(`   After Escape -> Visual View: ${afterEscVisual} (USER HAS CONTROLS BACK!)`);
+  console.log(`   After Escape -> Page detected Escape: ${afterEscKey} (SHIELDED!)`);
+  console.log(`   Viewport spoofing (innerHeight == screen.height): ${isInnerHeightSpoofed} (SPOOFED!)`);
 
   const screenshotPath = path.join(__dirname, 'test-result-page.png');
   await page.screenshot({ path: screenshotPath });
@@ -137,9 +156,11 @@ try {
   console.log(`Watchdog Detection:               ${watchdogStatus}`);
   console.log(`Universal Text Selection:         YES (user-select: text)`);
   console.log(`Universal Copy & Paste:           YES (Copied and pasted)`);
-  console.log(`document.fullscreenElement:       ${postElem}`);
-  console.log(`Page believes it is fullscreen:   ${postStatus}`);
-  console.log(`Window Management Keys:           Shielded from page detection`);
+  console.log(`document.fullscreenElement:       ${afterEscElem} (PERSISTED AFTER ESCAPE)`);
+  console.log(`Page believes it is fullscreen:   ${afterEscStatus}`);
+  console.log(`Visual View State for User:       ${afterEscVisual}`);
+  console.log(`Escape Key Detection by Page:     ${afterEscKey} (BLOCKED)`);
+  console.log(`Screen/Viewport Spoofing:         ${isInnerHeightSpoofed ? 'YES (Active)' : 'NO'}`);
   console.log('======================================================');
   console.log(`Screenshot saved to: ${screenshotPath}\n`);
 

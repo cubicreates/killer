@@ -28,12 +28,16 @@ It eliminates intrusive web restrictions: preventing websites from forcing real 
   - Traps and silences `visibilitychange`, `blur`, `focusout`, and `pagehide` events in the capture phase.
   - **Result:** You can switch tabs, minimize Chrome, or Alt+Tab to VS Code/Discord/games, and your background audio will play continuously without pausing.
 
-### 2. 🖥️ Fullscreen Interception
-- **The Problem:** Sites force the browser into full OS-level fullscreen, hijacking your monitor and hiding tabs, taskbars, and tools.
+### 2. 🖥️ Fullscreen Maximization & Stealth Escape Control
+- **The Problem:** Sites force full OS-level fullscreen to lock you into their window, monitor you via `document.fullscreenElement`, track window dimensions (`innerHeight === screen.height`), and catch you if you press `Escape` or `Alt+Tab`.
 - **The DRDOOM Fix:**
-  - Intercepts `Element.prototype.requestFullscreen()` (and vendor prefixes) in the page's MAIN execution world.
-  - Resolves the promise immediately, sets `document.fullscreenElement`, and fires `fullscreenchange` events.
-  - **Result:** The website believes it is in fullscreen, while your browser window remains safely windowed.
+  - **Auto-Maximization on Launch:** When the site calls `requestFullscreen()`, DRDOOM visually expands the target element to fill the viewport and commands Chrome's background service worker to maximize the browser window.
+  - **API Spoofing:** Resolves `requestFullscreen()` immediately, fires `fullscreenchange` events, and locks `document.fullscreenElement` to the element.
+  - **Stealth Escape (User in Full Control):**
+    - Press **`Escape`**: Restores the window to normal size and un-locks the visual view for you, but **NEVER tells the website**. The website still sees `document.fullscreenElement !== null` and no exit event is ever fired!
+    - Press **`Shift+Escape`**: Minimizes the browser window directly to the taskbar while keeping the website completely spoofed.
+  - **Viewport Dimension Armor:** Spoofs `window.innerWidth` and `window.innerHeight` to report `screen.width` and `screen.height`, blinding sites that check if your window matches the monitor resolution.
+  - **Result:** The site believes you are 100% trapped in fullscreen, while you freely have window controls, tabs, and `Alt+Tab` multitasking.
 
 ### 3. 📖 Universal Text Selection (FanFiction.Net & Text Lock Unblocker)
 - **The Problem:** Websites (such as FanFiction.Net, news outlets, and blogs) lock story text and author notes with CSS `-webkit-user-select: none` and `onselectstart="return false;"`.
