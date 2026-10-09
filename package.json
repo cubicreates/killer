@@ -1,0 +1,21 @@
+{
+  "name": "silent-fullscreen-interceptor",
+  "version": "1.0.0",
+  "description": "Silent Fullscreen Interceptor Chrome Extension (MV3)",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test": "node test-runner.mjs"
+  },
+  "keywords": [
+    "chrome-extension",
+    "fullscreen",
+    "manifest-v3"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.64.0"
+  }
+}
