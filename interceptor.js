@@ -16,6 +16,8 @@
   let currentFullscreenElement = null;
   let lastCopiedText = '';
   let isTypingSimulationActive = false;
+  let activeTypingSessionId = 0;
+  const originalPreventDefault = Event.prototype.preventDefault;
 
   // ==========================================
   // BRIDGE COMMUNICATION (MAIN WORLD -> ISOLATED BRIDGE -> BACKGROUND)
@@ -171,7 +173,8 @@
 
     // Escape Key User Control: Exit fullscreen to normal window without notifying the website!
     if (e.key === 'Escape' && e.type === 'keydown') {
-      isTypingSimulationActive = false; // Abort typing simulation if running
+      isTypingSimulationActive = false;
+      activeTypingSessionId++;
       e.stopImmediatePropagation();
       e.preventDefault();
 
@@ -189,10 +192,31 @@
       return;
     }
 
-    // Ctrl+Shift+V / Cmd+Shift+V: Trigger Ghost Human Typer (types text with keystroke stream)
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'v' || e.key === 'V') && e.type === 'keydown') {
+    // Ctrl+C / Cmd+C: Instant capture of selected text into DRDOOM cache
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C') && e.type === 'keydown') {
+      const sel = window.getSelection();
+      let text = sel ? sel.toString() : '';
+      if (!text && document.activeElement) {
+        const active = document.activeElement;
+        if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') {
+          try {
+            const start = active.selectionStart;
+            const end = active.selectionEnd;
+            if (typeof start === 'number' && typeof end === 'number' && start !== end) {
+              text = (active.value || '').slice(start, end);
+            }
+          } catch (err) {}
+        }
+      }
+      if (text) {
+        lastCopiedText = text;
+      }
+    }
+
+    // Ctrl+V / Cmd+V: Trigger Ghost Human Typer on standard paste!
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V') && e.type === 'keydown') {
       e.stopImmediatePropagation();
-      e.preventDefault();
+      originalPreventDefault.call(e); // Crucial: Cancel browser's native paste action so zero-delay burst paste does NOT occur!
 
       const target = getActiveOrTargetElement(e);
       if (!target) return;
@@ -201,7 +225,10 @@
         simulateHumanTyping(target, lastCopiedText);
       } else if (navigator.clipboard && navigator.clipboard.readText) {
         navigator.clipboard.readText().then(function (clip) {
-          if (clip) simulateHumanTyping(target, clip);
+          if (clip) {
+            lastCopiedText = clip;
+            simulateHumanTyping(target, clip);
+          }
         }).catch(function () {});
       }
       return;
@@ -309,20 +336,11 @@
   // ==========================================
 
   // LAYER 1: Neutralize Event.prototype.preventDefault during paste & copy
-  // This allows the browser's native paste & copy engine to execute even when
-  // websites call e.preventDefault() in paste listeners or on Ctrl+V keydown!
-  const originalPreventDefault = Event.prototype.preventDefault;
+  // This prevents websites from blocking paste events when right-click pasting
   Event.prototype.preventDefault = function () {
     if (this.type === 'paste') {
       // Disarm website anti-paste script trying to prevent paste!
       return;
-    }
-    if (this.type === 'keydown') {
-      const isPasteShortcut = (this.ctrlKey || this.metaKey) && (this.key === 'v' || this.key === 'V');
-      if (isPasteShortcut) {
-        // Disarm website trying to block Ctrl+V keydown!
-        return;
-      }
     }
     return originalPreventDefault.apply(this, arguments);
   };
@@ -457,39 +475,70 @@
     }
   }
 
-  // LAYER 4: Ghost Human Typer (Keystroke Stream Synthesizer)
-  // Generates real keydown -> beforeinput -> input -> keyup events with human jitter per character
+  // LAYER 4: Ghost Human Typer (Dual-Engine: Instant Frontend + Authentic Keystroke Stream)
+  // 1. FRONTEND: Value is placed into the field immediately (instant copy-paste feel for the user).
+  // 2. BACKEND: Keystrokes stream in background (keydown -> beforeinput -> input -> keyup)
+  //    so website telemetry, keyloggers, and anti-paste detectors record authentic manual typing!
   function simulateHumanTyping(rawTarget, text) {
-    if (!text || !rawTarget || isTypingSimulationActive) return;
+    if (!text || !rawTarget) return;
 
     const target = findEditableTarget(rawTarget);
     if (!target) return;
 
+    const currentSession = ++activeTypingSessionId;
     isTypingSimulationActive = true;
 
-    // Adapt speed dynamically to finish in ~1-2s while maintaining authentic cadence
-    let minDelay = 4;
-    let maxDelay = 12;
+    // 1. Prime the first character's keydown (ensures keydown count > 0 before any input event)
+    const firstChar = text[0] || ' ';
+    const firstCharCode = firstChar.charCodeAt(0);
+    const primeDownEvt = new KeyboardEvent('keydown', {
+      key: firstChar,
+      code: `Key${firstChar.toUpperCase()}`,
+      charCode: firstCharCode,
+      keyCode: firstCharCode,
+      which: firstCharCode,
+      bubbles: true,
+      cancelable: true
+    });
+    target.dispatchEvent(primeDownEvt);
+
+    // 2. FRONTEND: Insert the full text into the field immediately!
+    // The user sees their pasted content instantly without waiting!
+    forceInsertText(target, text);
+
+    // 3. Dispatch prime character keyup
+    const primeUpEvt = new KeyboardEvent('keyup', {
+      key: firstChar,
+      code: `Key${firstChar.toUpperCase()}`,
+      charCode: firstCharCode,
+      keyCode: firstCharCode,
+      which: firstCharCode,
+      bubbles: true,
+      cancelable: true
+    });
+    target.dispatchEvent(primeUpEvt);
+
+    // 4. BACKEND: Stream authentic keystrokes in the background ("happening happening happening")
+    let index = 1;
+    let minDelay = 2;
+    let maxDelay = 6;
     if (text.length > 500) {
-      minDelay = 1;
-      maxDelay = 3;
-    } else if (text.length < 50) {
-      minDelay = 10;
-      maxDelay = 22;
+      minDelay = 0;
+      maxDelay = 2;
     }
 
-    let index = 0;
-
     function step() {
-      if (!isTypingSimulationActive || index >= text.length) {
-        isTypingSimulationActive = false;
+      if (activeTypingSessionId !== currentSession || !isTypingSimulationActive || index >= text.length) {
+        if (activeTypingSessionId === currentSession) {
+          isTypingSimulationActive = false;
+        }
         return;
       }
 
       const char = text[index++];
       const charCode = char.charCodeAt(0);
 
-      // 1. Dispatch keydown event
+      // (a) Dispatch keydown event
       const downEvt = new KeyboardEvent('keydown', {
         key: char,
         code: `Key${char.toUpperCase()}`,
@@ -501,7 +550,7 @@
       });
       target.dispatchEvent(downEvt);
 
-      // 2. Dispatch beforeinput event
+      // (b) Dispatch beforeinput event
       try {
         const beforeEvt = new InputEvent('beforeinput', {
           inputType: 'insertText',
@@ -512,37 +561,7 @@
         target.dispatchEvent(beforeEvt);
       } catch (e) {}
 
-      // 3. Insert character into DOM
-      if (target.isContentEditable) {
-        try {
-          document.execCommand('insertText', false, char);
-        } catch (e) {}
-      } else if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-        try {
-          let start = target.selectionStart;
-          let end = target.selectionEnd;
-          if (typeof start !== 'number') {
-            start = (target.value || '').length;
-            end = start;
-          }
-          const val = target.value || '';
-          const nextVal = val.slice(0, start) + char + val.slice(end);
-
-          const proto = target instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-          const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-          if (nativeSetter) {
-            nativeSetter.call(target, nextVal);
-          } else {
-            target.value = nextVal;
-          }
-
-          try { target.setSelectionRange(start + 1, start + 1); } catch (err) {}
-        } catch (e) {
-          target.value = (target.value || '') + char;
-        }
-      }
-
-      // 4. Dispatch input event (inputType: 'insertText')
+      // (c) Dispatch input event
       try {
         const inEvt = new InputEvent('input', {
           inputType: 'insertText',
@@ -555,7 +574,7 @@
         target.dispatchEvent(new Event('input', { bubbles: true }));
       }
 
-      // 5. Dispatch keyup event
+      // (d) Dispatch keyup event
       const upEvt = new KeyboardEvent('keyup', {
         key: char,
         code: `Key${char.toUpperCase()}`,
@@ -571,7 +590,12 @@
       setTimeout(step, delay);
     }
 
-    step();
+    if (text.length > 1) {
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+      setTimeout(step, delay);
+    } else {
+      isTypingSimulationActive = false;
+    }
   }
 
   // LAYER 5: Force-Copy & Copy Protection
@@ -642,6 +666,17 @@
   document.addEventListener('selectstart', handleGenericAllow, true);
   window.addEventListener('contextmenu', handleGenericAllow, true);
   document.addEventListener('contextmenu', handleGenericAllow, true);
+
+  // Pre-sync OS clipboard on window focus so Ctrl+V has zero-latency cache
+  window.addEventListener('focus', function () {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (clip) {
+        if (clip) {
+          lastCopiedText = clip;
+        }
+      }).catch(function () {});
+    }
+  }, true);
 
   // LAYER 6: Strip anti-clipboard attributes from DOM and dynamic nodes
   function stripAntiClipboardAttributes(root) {

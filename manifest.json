@@ -5,11 +5,18 @@
   "description": "Silent background extension: Fullscreen interception, window shield, universal text selection, clipboard unblocker, and tab/app switch protection.",
   "permissions": [
     "scripting",
-    "tabs"
+    "tabs",
+    "clipboardRead",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "background": {
     "service_worker": "background.js"
   },

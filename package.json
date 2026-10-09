@@ -7,7 +7,7 @@
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "test": "node test-runner.mjs",
-    "pack": "powershell -Command \"Compress-Archive -Path manifest.json, interceptor.js, bridge.js, background.js, README.md -DestinationPath DRDOOM-v1.0.0.zip -Force\""
+    "pack": "powershell -Command \"Compress-Archive -Path manifest.json, interceptor.js, bridge.js, background.js, icon.png, README.md -DestinationPath DRDOOM-v1.0.0.zip -Force\""
   },
   "keywords": [
     "chrome-extension",

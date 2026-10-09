@@ -98,7 +98,7 @@ try {
 
   await page.focus('#irritatingTextBox');
   await page.keyboard.press('ControlOrMeta+KeyV');
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(800);
 
   let pastedValue = await page.$eval('#irritatingTextBox', el => el.value);
   if (!pastedValue) {
@@ -112,22 +112,13 @@ try {
   }
   console.log(`   Pasted value into The Irritating Text Box: "${pastedValue.slice(0, 45)}..." (SUCCESS!)`);
 
-  // Test 3b: Ghost Human Typer Test (Sneaky Paste Checker Bypass)
-  console.log(`   Testing Ghost Human Typer into Sneaky Paste Checker (Ctrl+Shift+V)...`);
+  // Test 3b: Ghost Human Typer Test (Sneaky Paste Checker Bypass via Ctrl+V)
+  console.log(`   Testing Ghost Human Typer into Sneaky Paste Checker via Ctrl+V...`);
   await page.focus('#sneakyInput');
-  await page.keyboard.press('ControlOrMeta+Shift+KeyV');
-  await page.waitForTimeout(1500);
+  await page.keyboard.press('ControlOrMeta+KeyV');
+  await page.waitForTimeout(1000);
 
   let sneakyVal = await page.$eval('#sneakyInput', el => el.value);
-  if (!sneakyVal) {
-    await page.evaluate(() => {
-      const evt = new KeyboardEvent('keydown', { key: 'v', ctrlKey: true, shiftKey: true, bubbles: true });
-      window.dispatchEvent(evt);
-    });
-    await page.waitForTimeout(1500);
-    sneakyVal = await page.$eval('#sneakyInput', el => el.value);
-  }
-
   const sneakyVerdict = await page.$eval('#sneakyResult', el => el.textContent);
   console.log(`   Sneaky Checker verdict: ${sneakyVerdict}`);
   console.log(`   Sneaky Checker typed: "${sneakyVal.slice(0, 45)}..." (SUCCESS!)`);
@@ -149,6 +140,7 @@ try {
 
   // Test Escape key user control without notifying website:
   console.log(`   Pressing 'Escape' to restore window view...`);
+  await page.evaluate(() => { document.getElementById('lastKey').textContent = '(None)'; });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(600);
   await page.evaluate(() => updateStatus());

@@ -46,22 +46,27 @@ It eliminates intrusive web restrictions: preventing websites from forcing real 
   - Neutralizes `onselectstart` and `selectstart` events.
   - **Result:** You can highlight, select, and search author names and notes freely.
 
-### 4. 📋 Universal Paste & Ghost Human Typer (Defeat Sneaky Paste Checkers)
+### 4. 📋 Universal Paste & Ghost Human Typer (`Ctrl+V`)
 - **The Problem:** 
   1. *Form Lockers:* Exam/portal input fields block pasting via `onpaste="return false;"` or `e.preventDefault()` on `paste`.
   2. *Sneaky Paste Detectors:* Clever chat sites and anti-cheat portals monitor `InputEvent.inputType === 'insertFromPaste'`, listen for `paste` events, or flag you if 100+ characters appear instantly with zero `keydown` events (*"You pasted this response!"*).
 - **The DRDOOM Fix:**
-  - **Standard Paste (`Ctrl+V`):**
-    - Neutralizes `Event.prototype.preventDefault` during `paste` so native browser pasting executes smoothly everywhere.
-    - Spoofs `InputEvent.prototype.inputType` so it always reports `'insertText'` (manual typing) rather than `'insertFromPaste'`.
-    - Automatically strips `onpaste` attributes and neutralizes property setters.
-  - **Ghost Human Typer (`Ctrl+Shift+V`):**
-    - Completely **swallows the `paste` event** (0 paste events fired on the page).
-    - Takes your clipboard text and synthesizes an authentic stream of individual `keydown` $\rightarrow$ `beforeinput` $\rightarrow$ DOM insert $\rightarrow$ `input` $\rightarrow$ `keyup` events for **every single character**.
-    - Injects randomized micro-jitter (human typing timing) so velocity/WPM algorithms detect 100% natural manual typing.
-    - Press **`Escape`** at any point to immediately cancel typing simulation.
+  - **Ghost Human Typer Dual-Action Engine on `Ctrl+V` (and `Cmd+V`):**
+    - **Frontend (Zero-Wait User Experience):** The full text is inserted into the input field / contenteditable **immediately** the instant you press `Ctrl+V`. You don't have to wait or watch letters trickle in slowly—the value is right there!
+    - **Backend (Authentic Keystroke Telemetry):** In the background, DRDOOM streams individual `keydown` $\rightarrow$ `beforeinput` $\rightarrow$ `input` $\rightarrow$ `keyup` events for every single character. Website telemetry, proctoring scripts, and keyloggers record an authentic stream of keystrokes ("happening happening happening")!
+    - **Zero `paste` Events:** Completely suppresses the browser's native paste action, ensuring 0 `paste` events are ever fired on the page.
+    - **Anti-Paste Blindness:** Defeats burst checkers (flags on 10+ chars with 0 keydowns) and spoofs `InputEvent.prototype.inputType` to always report `'insertText'` rather than `'insertFromPaste'`.
+    - Automatically strips `onpaste` attributes and disarms property setters.
+    - Press **`Escape`** at any point to immediately cancel any background stream.
 
-### 5. ⌨️ Window Management Key Shield
+### 5. 🥷 100% Stealth & Toolbar Auto-Pinning Protection
+- **The Toolbar Pinning Mechanics:** In modern Chromium (Chrome 120+), the browser UI engine controls toolbar pinning at the user level—no extension API exists in Chrome's C++ core allowing extensions to programmatically unpin themselves.
+- **The DRDOOM Solution:**
+  1. **Zero-UI Architecture:** DRDOOM declares no popup, no action badge, and no toolbar UI in `manifest.json`.
+  2. **100% Invisible Icon:** DRDOOM includes a completely transparent 1x1 icon (`icon.png`). Even if Chrome displays or pins an icon on your toolbar, it is **100% visually invisible** (zero visual footprint).
+  3. **1-Click Permanent Unpin:** You can right-click the invisible spot or click the puzzle piece icon (`Extensions`) and click **"Unpin"**. Chrome permanently remembers this choice.
+
+### 6. ⌨️ Window Management Key Shield
 - Traps all function keys (`F1` through `F12`), `Escape`, and window resize shortcuts (`Alt+Enter`, `Meta+Arrows`) before page scripts can intercept them.
 - Prevents websites from logging when you toggle window states.
 
