@@ -7,11 +7,63 @@
 (function () {
   'use strict';
 
-  if (window.__DRDOOM_LOADED__) {
+  // ==========================================
+  // NATIVE CAMOUFLAGE & CLOAK ENGINE
+  // ==========================================
+  const cloakedRegistry = new WeakMap();
+  const originalToString = Function.prototype.toString;
+
+  function cloakFunction(fn, name, length = 0) {
+    if (!fn) return fn;
+    try {
+      Object.defineProperties(fn, {
+        name: { value: name, configurable: true, writable: false, enumerable: false },
+        length: { value: length, configurable: true, writable: false, enumerable: false }
+      });
+    } catch (e) {}
+    cloakedRegistry.set(fn, name);
+    return fn;
+  }
+
+  // Idempotency check
+  if (cloakedRegistry.has(document.hasFocus)) {
     return;
   }
-  window.__DRDOOM_LOADED__ = true;
-  window.__SILENT_FULLSCREEN_INTERCEPTOR_LOADED__ = true;
+
+  const cloakedToString = function toString() {
+    if (this === cloakedToString) {
+      return 'function toString() { [native code] }';
+    }
+    if (cloakedRegistry.has(this)) {
+      const fnName = cloakedRegistry.get(this);
+      return `function ${fnName}() { [native code] }`;
+    }
+    return originalToString.apply(this, arguments);
+  };
+  cloakFunction(cloakedToString, 'toString', 0);
+  try {
+    Object.defineProperty(Function.prototype, 'toString', {
+      value: cloakedToString,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    });
+  } catch (e) {
+    Function.prototype.toString = cloakedToString;
+  }
+
+  function defineCloakedProperty(target, prop, getter, setter) {
+    const getterCloaked = getter ? cloakFunction(getter, `get ${prop}`, 0) : undefined;
+    const setterCloaked = setter ? cloakFunction(setter, `set ${prop}`, 1) : undefined;
+    try {
+      Object.defineProperty(target, prop, {
+        get: getterCloaked,
+        set: setterCloaked,
+        configurable: true,
+        enumerable: true
+      });
+    } catch (e) {}
+  }
 
   let currentFullscreenElement = null;
   let lastCopiedText = '';
@@ -20,17 +72,21 @@
   const originalPreventDefault = Event.prototype.preventDefault;
 
   // ==========================================
-  // BRIDGE COMMUNICATION (MAIN WORLD -> ISOLATED BRIDGE -> BACKGROUND)
+  // SILENT BRIDGE (MAIN WORLD -> ISOLATED BRIDGE)
+  // Non-bubbling CustomEvent on document captured in capture phase
+  // Zero window.postMessage broadcasts to ensure zero leak
   // ==========================================
+  const SYNC_EVENT = '__cx_sync_cmd__';
+
   function sendBridgeAction(action) {
     if (!action) return;
     try {
-      window.postMessage({ source: '__DRDOOM__', action: action }, '*');
-    } catch (e) {}
-    try {
-      window.dispatchEvent(new CustomEvent('__DRDOOM_BRIDGE_EVENT__', {
-        detail: { action: action }
-      }));
+      const evt = new CustomEvent(SYNC_EVENT, {
+        detail: { action: action },
+        bubbles: false,
+        cancelable: true
+      });
+      document.dispatchEvent(evt);
     } catch (e) {}
   }
 
@@ -60,7 +116,7 @@
     });
   }
 
-  function mockRequestFullscreen() {
+  const mockRequestFullscreen = cloakFunction(function requestFullscreen() {
     currentFullscreenElement = this;
 
     // Trigger REAL native browser fullscreen on the Chrome window
@@ -71,7 +127,7 @@
       dispatchFullscreenEvents();
     });
     return Promise.resolve();
-  }
+  }, 'requestFullscreen', 0);
 
   const elementRequestMethods = [
     'requestFullscreen',
@@ -86,14 +142,14 @@
     } catch (e) {}
   });
 
-  function mockExitFullscreen() {
+  const mockExitFullscreen = cloakFunction(function exitFullscreen() {
     currentFullscreenElement = null;
     sendBridgeAction('RESTORE');
     queueMicrotask(function () {
       dispatchFullscreenEvents();
     });
     return Promise.resolve();
-  }
+  }, 'exitFullscreen', 0);
 
   const documentExitMethods = [
     'exitFullscreen',
@@ -123,13 +179,8 @@
   };
 
   Object.keys(fsPropertyDefinitions).forEach(function (prop) {
-    const descriptor = {
-      get: fsPropertyDefinitions[prop],
-      configurable: true,
-      enumerable: true
-    };
-    try { Object.defineProperty(Document.prototype, prop, descriptor); } catch (e) {}
-    try { Object.defineProperty(document, prop, descriptor); } catch (e) {}
+    defineCloakedProperty(Document.prototype, prop, fsPropertyDefinitions[prop]);
+    defineCloakedProperty(document, prop, fsPropertyDefinitions[prop]);
   });
 
   // Viewport / Screen dimension spoofing (blinds sites checking innerHeight === screen.height)
@@ -137,24 +188,18 @@
     const origInnerW = Object.getOwnPropertyDescriptor(window, 'innerWidth') || { get: () => window.innerWidth };
     const origInnerH = Object.getOwnPropertyDescriptor(window, 'innerHeight') || { get: () => window.innerHeight };
 
-    Object.defineProperty(window, 'innerWidth', {
-      get: function () {
-        if (currentFullscreenElement !== null && window.screen) {
-          return window.screen.width;
-        }
-        return origInnerW.get ? origInnerW.get.call(window) : window.outerWidth;
-      },
-      configurable: true
+    defineCloakedProperty(window, 'innerWidth', function () {
+      if (currentFullscreenElement !== null && window.screen) {
+        return window.screen.width;
+      }
+      return origInnerW.get ? origInnerW.get.call(window) : window.outerWidth;
     });
 
-    Object.defineProperty(window, 'innerHeight', {
-      get: function () {
-        if (currentFullscreenElement !== null && window.screen) {
-          return window.screen.height;
-        }
-        return origInnerH.get ? origInnerH.get.call(window) : window.outerHeight;
-      },
-      configurable: true
+    defineCloakedProperty(window, 'innerHeight', function () {
+      if (currentFullscreenElement !== null && window.screen) {
+        return window.screen.height;
+      }
+      return origInnerH.get ? origInnerH.get.call(window) : window.outerHeight;
     });
   } catch (e) {}
 
@@ -188,7 +233,6 @@
 
       // CRITICAL: We deliberately do NOT clear currentFullscreenElement!
       // The website's document.fullscreenElement remains active, and NO exit event is fired!
-      console.log('[DRDOOM] User pressed Escape: Window restored. Website still thinks fullscreen is active!');
       return;
     }
 
@@ -249,28 +293,14 @@
   // 3. TAB & APP SWITCH PROTECTION (ALT+TAB & BACKGROUND AUDIO SHIELD)
   // ==========================================
   try {
-    Object.defineProperty(Document.prototype, 'visibilityState', {
-      get: () => 'visible',
-      configurable: true,
-      enumerable: true
-    });
-    Object.defineProperty(document, 'visibilityState', {
-      get: () => 'visible',
-      configurable: true,
-      enumerable: true
-    });
-    Object.defineProperty(Document.prototype, 'hidden', {
-      get: () => false,
-      configurable: true,
-      enumerable: true
-    });
-    Object.defineProperty(document, 'hidden', {
-      get: () => false,
-      configurable: true,
-      enumerable: true
-    });
-    Document.prototype.hasFocus = () => true;
-    document.hasFocus = () => true;
+    defineCloakedProperty(Document.prototype, 'visibilityState', () => 'visible');
+    defineCloakedProperty(document, 'visibilityState', () => 'visible');
+    defineCloakedProperty(Document.prototype, 'hidden', () => false);
+    defineCloakedProperty(document, 'hidden', () => false);
+
+    const mockHasFocus = cloakFunction(function hasFocus() { return true; }, 'hasFocus', 0);
+    Document.prototype.hasFocus = mockHasFocus;
+    document.hasFocus = mockHasFocus;
   } catch (e) {}
 
   function handleTabAndAppShield(e) {
@@ -288,10 +318,10 @@
   const tabBlockedProps = ['onblur', 'onfocusout', 'onvisibilitychange', 'onpagehide'];
   tabBlockedProps.forEach(function (prop) {
     try {
-      Object.defineProperty(window, prop, { get: () => null, set: () => {}, configurable: true });
-      Object.defineProperty(document, prop, { get: () => null, set: () => {}, configurable: true });
-      Object.defineProperty(Document.prototype, prop, { get: () => null, set: () => {}, configurable: true });
-      Object.defineProperty(HTMLElement.prototype, prop, { get: () => null, set: () => {}, configurable: true });
+      defineCloakedProperty(window, prop, () => null, () => {});
+      defineCloakedProperty(document, prop, () => null, () => {});
+      defineCloakedProperty(Document.prototype, prop, () => null, () => {});
+      defineCloakedProperty(HTMLElement.prototype, prop, () => null, () => {});
     } catch (e) {}
   });
 
@@ -305,23 +335,13 @@
   // 4. UNIVERSAL TEXT SELECTION ENABLER
   // ==========================================
   function applyTextSelectionStyles() {
-    const styleId = '__drdoom_text_selection_enabler__';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        *, *::before, *::after, html, body, div, span, p, a, article, section, main, #storytext, .storytext {
-          -webkit-user-select: text !important;
-          -moz-user-select: text !important;
-          -ms-user-select: text !important;
-          user-select: text !important;
-        }
-      `;
-      const root = document.head || document.documentElement;
-      if (root) {
-        root.appendChild(style);
+    try {
+      if (typeof CSSStyleSheet !== 'undefined' && document.adoptedStyleSheets) {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('*, *::before, *::after, html, body, div, span, p, a, article, section, main, #storytext, .storytext { -webkit-user-select: text !important; -moz-user-select: text !important; -ms-user-select: text !important; user-select: text !important; }');
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
       }
-    }
+    } catch (e) {}
   }
 
   if (document.documentElement) {
@@ -337,44 +357,42 @@
 
   // LAYER 1: Neutralize Event.prototype.preventDefault during paste & copy
   // This prevents websites from blocking paste events when right-click pasting
-  Event.prototype.preventDefault = function () {
+  const mockPreventDefault = cloakFunction(function preventDefault() {
     if (this.type === 'paste') {
       // Disarm website anti-paste script trying to prevent paste!
       return;
     }
     return originalPreventDefault.apply(this, arguments);
-  };
+  }, 'preventDefault', 0);
+  Event.prototype.preventDefault = mockPreventDefault;
 
   // LAYER 2: Neutralize Event.prototype.returnValue
   const originalReturnValueDesc = Object.getOwnPropertyDescriptor(Event.prototype, 'returnValue');
-  Object.defineProperty(Event.prototype, 'returnValue', {
-    get: function () {
+  defineCloakedProperty(
+    Event.prototype,
+    'returnValue',
+    function () {
       return originalReturnValueDesc && originalReturnValueDesc.get ? originalReturnValueDesc.get.call(this) : true;
     },
-    set: function (val) {
+    function (val) {
       if (this.type === 'paste') return;
       if (originalReturnValueDesc && originalReturnValueDesc.set) {
         originalReturnValueDesc.set.call(this, val);
       }
-    },
-    configurable: true
-  });
+    }
+  );
 
   // LAYER 2.5: Spoof InputEvent.prototype.inputType
   // Websites that check if (e.inputType === 'insertFromPaste') are tricked into seeing 'insertText' (manual typing)!
   try {
     const origInputTypeDesc = Object.getOwnPropertyDescriptor(InputEvent.prototype, 'inputType');
     if (origInputTypeDesc && origInputTypeDesc.get) {
-      Object.defineProperty(InputEvent.prototype, 'inputType', {
-        get: function () {
-          const val = origInputTypeDesc.get.call(this);
-          if (val === 'insertFromPaste') {
-            return 'insertText'; // Spoof: Always report as manual typing!
-          }
-          return val;
-        },
-        configurable: true,
-        enumerable: true
+      defineCloakedProperty(InputEvent.prototype, 'inputType', function () {
+        const val = origInputTypeDesc.get.call(this);
+        if (val === 'insertFromPaste') {
+          return 'insertText'; // Spoof: Always report as manual typing!
+        }
+        return val;
       });
     }
   } catch (e) {}
@@ -715,12 +733,10 @@
   const blockedClipboardProps = ['onselectstart', 'oncontextmenu', 'oncopy', 'oncut', 'onpaste', 'ondragstart'];
   blockedClipboardProps.forEach(function (prop) {
     try {
-      Object.defineProperty(Document.prototype, prop, { set: () => {}, get: () => null, configurable: true });
-      Object.defineProperty(HTMLElement.prototype, prop, { set: () => {}, get: () => null, configurable: true });
-      Object.defineProperty(HTMLInputElement.prototype, prop, { set: () => {}, get: () => null, configurable: true });
-      Object.defineProperty(HTMLTextAreaElement.prototype, prop, { set: () => {}, get: () => null, configurable: true });
+      defineCloakedProperty(Document.prototype, prop, () => null, () => {});
+      defineCloakedProperty(HTMLElement.prototype, prop, () => null, () => {});
+      defineCloakedProperty(HTMLInputElement.prototype, prop, () => null, () => {});
+      defineCloakedProperty(HTMLTextAreaElement.prototype, prop, () => null, () => {});
     } catch (e) {}
   });
-
-  console.log('[DRDOOM] Active: True native fullscreen interception, window keys, tab/app switch protection, text selection, and Universal Paste Engine enabled.');
 })();

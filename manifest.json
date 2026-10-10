@@ -25,6 +25,7 @@
       "matches": [
         "<all_urls>"
       ],
+      "css": ["stealth.css"],
       "js": ["interceptor.js"],
       "run_at": "document_start",
       "world": "MAIN",

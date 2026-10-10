@@ -58,8 +58,61 @@ try {
   await page.goto(`http://localhost:${PORT}/test.html`);
   await page.waitForLoadState('networkidle');
 
-  const isLoaded = await page.evaluate(() => Boolean(window.__DRDOOM_LOADED__));
-  console.log(`   DRDOOM active: ${isLoaded}`);
+  // Set up listener to check for public postMessage leakage
+  await page.evaluate(() => {
+    window.__testPublicLeaks__ = [];
+    window.addEventListener('message', (e) => {
+      try {
+        const str = JSON.stringify(e.data || '');
+        if (str.toLowerCase().includes('doom') || str.toLowerCase().includes('drdoom')) {
+          window.__testPublicLeaks__.push(e.data);
+        }
+      } catch (err) {}
+    });
+  });
+
+  console.log(`[3.5/7] Verifying Stealth & Extension Cloaking (Anti-Detection Suite)...`);
+  const stealthCheck = await page.evaluate(() => {
+    const leakedGlobals = Object.keys(window).filter(k => 
+      k.toLowerCase().includes('drdoom') || k.toLowerCase().includes('interceptor')
+    );
+    const leakedStyles = Array.from(document.querySelectorAll('style, script, link')).filter(el => 
+      (el.id && el.id.toLowerCase().includes('drdoom')) || (el.className && el.className.toLowerCase().includes('drdoom'))
+    );
+    const reqFsStr = Element.prototype.requestFullscreen ? Element.prototype.requestFullscreen.toString() : '';
+    const hasFocusStr = Document.prototype.hasFocus ? Document.prototype.hasFocus.toString() : '';
+    const toStringStr = Function.prototype.toString.toString();
+
+    return {
+      leakedGlobals,
+      leakedStyles: leakedStyles.map(el => el.id || el.tagName),
+      reqFsNative: reqFsStr.includes('[native code]') && !reqFsStr.includes('mock'),
+      hasFocusNative: hasFocusStr.includes('[native code]') && !hasFocusStr.includes('=>'),
+      toStringNative: toStringStr.includes('[native code]')
+    };
+  });
+
+  console.log(`   Leaked Window Globals: ${JSON.stringify(stealthCheck.leakedGlobals)}`);
+  console.log(`   Leaked DOM Styles:     ${JSON.stringify(stealthCheck.leakedStyles)}`);
+  console.log(`   requestFullscreen Native Mask: ${stealthCheck.reqFsNative}`);
+  console.log(`   hasFocus Native Mask:          ${stealthCheck.hasFocusNative}`);
+  console.log(`   toString Native Mask:          ${stealthCheck.toStringNative}`);
+
+  if (stealthCheck.leakedGlobals.length > 0) {
+    throw new Error(`[STEALTH FAIL] Leaked globals detected on window: ${stealthCheck.leakedGlobals.join(', ')}`);
+  }
+  if (stealthCheck.leakedStyles.length > 0) {
+    throw new Error(`[STEALTH FAIL] Leaked DOM elements detected: ${stealthCheck.leakedStyles.join(', ')}`);
+  }
+  if (!stealthCheck.reqFsNative) {
+    throw new Error(`[STEALTH FAIL] requestFullscreen does not masquerade as [native code]`);
+  }
+  if (!stealthCheck.hasFocusNative) {
+    throw new Error(`[STEALTH FAIL] hasFocus does not masquerade as [native code]`);
+  }
+  if (!stealthCheck.toStringNative) {
+    throw new Error(`[STEALTH FAIL] Function.prototype.toString does not masquerade as [native code]`);
+  }
 
   // Test 1: Background Music & Tab/App Switch Protection
   console.log(`[4/7] Testing Background Music & Tab/App Switch Protection...`);
@@ -157,13 +210,19 @@ try {
   console.log(`   After Escape -> Page detected Escape: ${afterEscKey} (SHIELDED!)`);
   console.log(`   Viewport spoofing (innerHeight == screen.height): ${isInnerHeightSpoofed} (SPOOFED!)`);
 
+  const publicLeaks = await page.evaluate(() => window.__testPublicLeaks__ || []);
+  console.log(`   Public radio leaks intercepted: ${publicLeaks.length}`);
+  if (publicLeaks.length > 0) {
+    throw new Error(`[STEALTH FAIL] Public postMessage leak detected: ${JSON.stringify(publicLeaks)}`);
+  }
+
   const screenshotPath = path.join(__dirname, 'test-result-page.png');
   await page.screenshot({ path: screenshotPath });
 
   console.log('\n======================================================');
   console.log('                 DRDOOM VERIFICATION RESULTS          ');
   console.log('======================================================');
-  console.log(`Extension Loaded:                 ${isLoaded ? 'YES (DRDOOM)' : 'NO'}`);
+  console.log(`Extension Stealth & Cloaking:     100% INVISIBLE (Zero Globals / Native Mask)`);
   console.log(`Background Music Shield:          PROTECTED (${musicStatus})`);
   console.log(`Watchdog Detection:               ${watchdogStatus}`);
   console.log(`Universal Text Selection:         YES (user-select: text)`);
