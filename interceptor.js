@@ -338,7 +338,7 @@
     try {
       if (typeof CSSStyleSheet !== 'undefined' && document.adoptedStyleSheets) {
         const sheet = new CSSStyleSheet();
-        sheet.replaceSync('*, *::before, *::after, html, body, div, span, p, a, article, section, main, #storytext, .storytext { -webkit-user-select: text !important; -moz-user-select: text !important; -ms-user-select: text !important; user-select: text !important; }');
+        sheet.replaceSync('html, body, div, span, p, a, article, section, main, label, h1, h2, h3, h4, h5, h6, *, *::before, *::after, [class], [id], [class] *, [id] * { -webkit-user-select: text !important; -moz-user-select: text !important; -ms-user-select: text !important; user-select: text !important; }');
         document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
       }
     } catch (e) {}

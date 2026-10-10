@@ -1,6 +1,9 @@
-/* DRDOOM Stealth Engine - Engine-level User Selection Enforcement */
+/* DRDOOM Stealth Engine - Universal High-Specificity Selection Overrides */
 /* Injected via Chromium content_scripts without creating DOM <style> tags */
-*, *::before, *::after, html, body, div, span, p, a, article, section, main, #storytext, .storytext {
+html, body, div, span, p, a, article, section, main, label, h1, h2, h3, h4, h5, h6,
+*, *::before, *::after,
+[class], [id], [class] *, [id] *,
+:is(*, [class], [id], div, p, span, label, h1, h2, h3, h4, h5, h6) {
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
   -ms-user-select: text !important;

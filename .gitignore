@@ -1,5 +1,7 @@
 node_modules/
 .test-*/
 test-result*.png
+exam-proof*.png
+exam-portal/
 package-lock.json
 DRDOOM.pem

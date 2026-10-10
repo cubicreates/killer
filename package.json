@@ -7,6 +7,7 @@
     "dev": "node server.mjs",
     "start": "node server.mjs",
     "test": "node test-runner.mjs",
+    "test:exam": "node exam-runner.mjs",
     "pack": "powershell -Command \"Compress-Archive -Path manifest.json, interceptor.js, bridge.js, background.js, stealth.css, icon.png, README.md -DestinationPath DRDOOM-v1.0.0.zip -Force\""
   },
   "keywords": [
